@@ -1,0 +1,13 @@
+[GuiMigrateQuartusPage]
+verilogFiles=cpld_board.v, analog_ip.v
+
+[GuiMigrateSetupPage]
+design=cpld_board
+device=AGRV2KL100
+flowInline=force
+
+[GuiMigrateRunPage]
+fitting=1
+fitter=5
+effort=2
+skew=2

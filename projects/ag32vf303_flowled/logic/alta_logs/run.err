@@ -1,0 +1,14 @@
+Info: Instance gclksw_inst|gclk_switch is identified as a clock switch.
+Info: Found GCLK net PLL_ENABLE~clkctrl_outclk (2).
+Info: Found GCLK net gclksw_inst|clkout (6).
+Info: Fixing net PIN_HSE~input_o, from PIN_HSE~input|combout to gclksw_inst|gclk_switch__alta_gclksw|clkin1.
+Info: Slice gpio7_io_out_data[6] is removed.
+Info: Slice gpio7_io_out_en[6] is removed.
+Info: The input of IO UART0_UARTRXD is disabled since all input pins are unused.
+Info: The input of IO UART0_UARTRXD is disabled since all input pins are unused.
+Info: Auto constraint PLL: create_generated_clock -name pll_inst|auto_generated|pll1|clk[0] -multiply_by 25 -add -source PIN_HSE -master_clock PIN_HSE pll_inst|auto_generated|pll1|clkout0.
+Warn: [set_false_path] Unrecognized object rv32|resetn_out, must be Clock {Register Term} {Pin Term} Instance.
+Info: The input of IO UART0_UARTRXD is disabled since all input pins are unused.
+Warn: User constraints has 5.9% uncovered.
+
+Total 0 fatals, 0 errors, 2 warnings, 10 infos.

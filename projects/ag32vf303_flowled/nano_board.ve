@@ -1,0 +1,13 @@
+SYSCLK 200
+
+HSECLK 8
+
+# Debug console (AGM demo board UART0 on 100-pin header)
+UART0_UARTRXD PIN_69
+UART0_UARTTXD PIN_68
+
+# On-board LEDs (active high), per AGM official example_board.ve
+GPIO4_1 PIN_34 # LED1
+GPIO4_2 PIN_33 # LED2
+GPIO4_3 PIN_32 # LED3
+GPIO4_4 PIN_31 # LED4

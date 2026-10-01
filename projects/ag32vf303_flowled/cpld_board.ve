@@ -1,0 +1,13 @@
+SYSCLK 200
+
+HSECLK 8
+
+# Debug console (optional, kept for the minimal MCU host app)
+UART0_UARTRXD PIN_69
+UART0_UARTTXD PIN_68
+
+# LEDs driven directly by the user CPLD logic (active high)
+LED_D1 PIN_34:OUTPUT
+LED_D2 PIN_33:OUTPUT
+LED_D3 PIN_32:OUTPUT
+LED_D4 PIN_31:OUTPUT

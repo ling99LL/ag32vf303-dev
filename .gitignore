@@ -1,0 +1,52 @@
+# ===== AG32 workspace .gitignore =====
+# Build artifacts (regenerable via documented flows)
+
+# PlatformIO build dirs
+.pio/
+**/.pio/
+
+# Supra / Quartus compiled databases (regenerate via prelogic + compile)
+**/logic/alta_db/
+**/logic/db/
+**/logic/incremental_db/
+**/logic/greybox_tmp/
+**/logic/quartus_logs/
+**/logic/simulation/
+**/logic/output_files/
+**/logic/alta_logs/
+**/logic/*.log
+**/logic/*.rpt
+**/logic/*.tx
+**/logic/*.prg
+**/logic/*.svf
+**/logic/*.qws
+**/logic/*.bak
+**/logic/cpld_board.hx
+**/logic/cpld_board.inc
+**/logic/cpld_board.vex
+**/logic/*.startsdb
+
+# ZCode session drafts (skills are kept)
+.zcode/plans/
+
+# Python host tools build artifacts
+**/__pycache__/
+foc/foc_knob/host/build/
+foc/foc_knob/host/dist/
+foc/foc_knob/host/mode_probe/
+foc/foc_knob/host/*.csv
+foc/foc_knob/host/*.spec
+
+# Third-party reference copy (upstream: github.com/scottbez1/smartknob)
+ref-smartknob/
+
+# Scratch files
+sk-tree.json
+smartknob-master.tar.gz
+*.lnk
+*.dwl
+*.dwl2
+
+# OS junk
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,36 @@
+SYSCLK 200
+BUSCLK 100
+HSECLK 8
+
+# ---------------- 3-phase PWM ----------------
+# GPTIMER0 CH0/1/2 -> driver board IN1/IN2/IN3 (20kHz center-aligned SVPWM)
+GPTIMER0_CH0 PIN_7
+GPTIMER0_CH1 PIN_8
+GPTIMER0_CH2 PIN_9
+
+# ---------------- driver board control ----------------
+GPIO0_0 PIN_10 # EN     (active high, idle high when running)
+GPIO0_1 PIN_11 # nRESET (active low, idle high)
+GPIO0_2 PIN_12 # nSLEEP (active low, idle high)
+GPIO0_3 PIN_13 # nFAULT (input, active low)
+
+# ---------------- motor hall sensors ----------------
+# HU/HV/HW on the same GPIO0 port -> one GPIO0_isr handles all edges
+# NOTE: PIN_27 = JTDO on AG32VFxxxK (debug TAP owns it, GPIO input dead) -> HV on PIN_29
+GPIO0_4 PIN_26 # HALL_U
+GPIO0_5 PIN_29 # HALL_V
+GPIO0_6 PIN_28 # HALL_W
+
+# ---------------- debug UART0 (QFN32 recommended pads, keep wired to DAPLink) ----------------
+UART0_UARTTXD PIN_20
+UART0_UARTRXD PIN_21
+
+# Spare pads for later use:
+#   PIN_5  = ADC_IN12, PIN_14 = ADC_IN7 (fixed analog pads, for future current sensing)
+#   PIN_18/19/31 free for SPI/I2C magnetic encoder upgrade (PIN_27 unusable: JTDO)
+
+# ---- CAN/UART multipurpose test (QFN32 free pads) ----
+CAN0_TX0 can_tx_chn
+CAN0_RX0 can_rx_chn
+UART2_UARTTXD PIN_18
+UART2_UARTRXD PIN_19
