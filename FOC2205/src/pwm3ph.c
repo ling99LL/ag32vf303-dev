@@ -40,6 +40,8 @@ void pwm3ph_init(void)
 void pwm3ph_outputs(int on)
 {
   if (on) {
+    // D-6 fix: clear any transient break flag latched during power-up before enabling MOE
+    GPTIMER_ClearFlagBreak(GPTIMER0);
     GPTIMER0->BDTR |= GPTIMER_BDTR_MOE;
     GPTIMER_EnableCounter(GPTIMER0);
   } else {

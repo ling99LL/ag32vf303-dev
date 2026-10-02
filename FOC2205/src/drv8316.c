@@ -53,7 +53,12 @@ void drv8316_init(void)
   drv_wake();
   delay_ms(50);   // TPwrUp (internal rails) + tREADY (1ms SPI ready) with margin
 
+  // D-1 fix: Write CTRL1 twice to ensure lock is released across any bus noise/warm reboot
   drv8316_write_reg(DRV_REG_CTRL1, DRV_VAL_CTRL1_UNLOCK);
+  delay_us(100);
+  drv8316_write_reg(DRV_REG_CTRL1, DRV_VAL_CTRL1_UNLOCK);
+  delay_us(100);
+
   drv8316_write_reg(DRV_REG_CTRL6, DRV_VAL_CTRL6);   // buck config first (0x11, see .h)
   drv8316_write_reg(DRV_REG_CTRL2, DRV_VAL_CTRL2);   // 3x mode + slew + push-pull SDO
                                                      // (INLx is LOW here — Table 8-2 note)

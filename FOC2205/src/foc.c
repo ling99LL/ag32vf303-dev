@@ -5,9 +5,11 @@
 #include "pwm3ph.h"
 
 #define TWO_PI_F 6.28318530718f
+#define FOC_LUT_SIZE 256
 
 foc_params_t g_foc;
 
+static float s_sin_lut[FOC_LUT_SIZE + 1];
 static mt6701_sample_t s_angle;
 static int16_t s_ia, s_ib, s_ic;
 static int32_t s_angle_q14;
@@ -15,8 +17,31 @@ static int32_t s_iq_q12;
 static uint32_t s_crc_errors;
 static uint16_t s_isr_div;
 
+static void foc_lut_init(void)
+{
+  for (int i = 0; i <= FOC_LUT_SIZE; ++i) {
+    s_sin_lut[i] = sinf((TWO_PI_F * (float)i) / (float)FOC_LUT_SIZE);
+  }
+}
+
+// Fast sincos with linear interpolation: executes in ~25 cycles without __kernel_rem_pio2f or 448-byte stack
+static inline void foc_fast_sincos(float angle_rad, float *s, float *c)
+{
+  const float rad2idx = (float)FOC_LUT_SIZE / TWO_PI_F;
+  float idx_f = angle_rad * rad2idx;
+  int idx = (int)idx_f;
+  float frac = idx_f - (float)idx;
+
+  idx &= (FOC_LUT_SIZE - 1);
+  *s = s_sin_lut[idx] + frac * (s_sin_lut[idx + 1] - s_sin_lut[idx]);
+
+  int c_idx = (idx + (FOC_LUT_SIZE / 4)) & (FOC_LUT_SIZE - 1);
+  *c = s_sin_lut[c_idx] + frac * (s_sin_lut[c_idx + 1] - s_sin_lut[c_idx]);
+}
+
 void foc_init(uint16_t pole_pairs)
 {
+  foc_lut_init();
   g_foc.pole_pairs = pole_pairs;
   g_foc.v_limit_q = 8192;   // Q12 = 2.0V phase voltage — safe bring-up cap for any
                             // VM >= 7V (line-line ~3.5V); raise with Vbus sensing
@@ -105,7 +130,7 @@ void foc_align_sensor(void)
 
 // Voltage-mode FOC step (runs in the GPTIMER0 update ISR = PWM valley):
 // currents + angle are sampled first so phase and current share one instant,
-// then inverse Park + Clarke produce the three SPWM duties.
+// then inverse Park + Clarke + SVPWM injection produce the three duties.
 void foc_step_isr(void)
 {
   // 1. valley-synchronous current telemetry, every 16th cycle (P2-3: the
@@ -142,9 +167,9 @@ void foc_step_isr(void)
     vmax = 0.01f;
   }
 
-  // 5. inverse Park
-  float c = cosf(ang_e);
-  float s = sinf(ang_e);
+  // 5. inverse Park with fast LUT sincos (D-2 fix)
+  float c, s;
+  foc_fast_sincos(ang_e, &s, &c);
   float va = vd * c - vq * s;
   float vb = vd * s + vq * c;
 
@@ -153,11 +178,20 @@ void foc_step_isr(void)
   float v_b = -0.5f * va + 0.8660254f * vb;
   float v_c = -0.5f * va - 0.8660254f * vb;
 
-  // 7. SPWM duties (center = ARR/2; +/-vmax maps to full scale)
+  // 7. SVPWM common-mode zero-sequence injection (D-3 fix: +15.5% bus utilization)
+  float v_max_p = (v_a > v_b) ? ((v_a > v_c) ? v_a : v_c) : ((v_b > v_c) ? v_b : v_c);
+  float v_min_p = (v_a < v_b) ? ((v_a < v_c) ? v_a : v_c) : ((v_b < v_c) ? v_b : v_c);
+  float v_com = -0.5f * (v_max_p + v_min_p);
+
+  float v_a_mod = v_a + v_com;
+  float v_b_mod = v_b + v_com;
+  float v_c_mod = v_c + v_com;
+
+  // 8. PWM duties (center = ARR/2; +/-vmax maps to full scale)
   float k = (float)PWM3PH_ARR / (2.0f * vmax);
-  pwm3ph_set((int32_t)((float)PWM3PH_ARR * 0.5f + v_a * k),
-             (int32_t)((float)PWM3PH_ARR * 0.5f + v_b * k),
-             (int32_t)((float)PWM3PH_ARR * 0.5f + v_c * k));
+  pwm3ph_set((int32_t)((float)PWM3PH_ARR * 0.5f + v_a_mod * k),
+             (int32_t)((float)PWM3PH_ARR * 0.5f + v_b_mod * k),
+             (int32_t)((float)PWM3PH_ARR * 0.5f + v_c_mod * k));
 
   // diagnostic: expose one phase current (Q12 amps approx)
   s_iq_q12 = (int32_t)s_ib;

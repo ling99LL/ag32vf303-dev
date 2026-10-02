@@ -56,7 +56,7 @@ assign UART0_UARTTXD = PIN_20_out_en ? PIN_20_out_data : 1'bz;
 assign PIN_21_in = UART0_UARTRXD;
 
 // GPTIMER0_BRK, GPIO4_1
-assign PIN_26_in = GPTIMER0_BRK;
+assign PIN_22_in = GPTIMER0_BRK;
 
 // GPIO2_1, GPIO2_1
 assign PIN_5_in = GPIO2_1;
@@ -384,7 +384,7 @@ assign spi0_csn_f_out_data = gpio4_io_out_data[6];
 assign spi0_csn_f_out_en = gpio4_io_out_en[6];
 assign spi1_sck_f_out_data = gpio4_io_out_data[7];
 assign spi1_sck_f_out_en = gpio4_io_out_en[7];
-(* keep = 1 *) wire [7:0] gpio4_io_in = {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PIN_26_in, 1'b0};
+(* keep = 1 *) wire [7:0] gpio4_io_in = {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PIN_22_in, 1'b0};
 
 (* keep = 1 *) wire [7:0] gpio5_io_out_data;
 (* keep = 1 *) wire [7:0] gpio5_io_out_en;

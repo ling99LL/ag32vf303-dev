@@ -70,9 +70,18 @@ int main(void)
   pwm3ph_init();
   printf("PWM3ph ready: %u Hz, ARR=%u\n", (unsigned)PWM3PH_FREQ_HZ, (unsigned)PWM3PH_ARR);
 
-  // --- driver configuration (CTRL2 write happens while INLx is LOW) ---
-  drv8316_init();
-  if (!drv_selftest()) {
+  // --- driver configuration with auto-retry on bus glitch / lock state (D-1 fix) ---
+  int drv_ready = 0;
+  for (int retry = 0; retry < 3; ++retry) {
+    drv8316_init();
+    if (drv_selftest()) {
+      drv_ready = 1;
+      break;
+    }
+    printf("DRV8316 init retry %d...\n", retry + 1);
+    drv8316_sleep_pulse_reset();
+  }
+  if (!drv_ready) {
     printf("HALT: fix SPI before enabling power stage\n");
     while (1) { }
   }
