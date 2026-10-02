@@ -28,7 +28,8 @@ int mt6701_read(mt6701_sample_t *s)
   mt_csn_low();
   delay_ns(150);
 
-  SPI_SendAndReceive(SPI1, 3, 0x000000u, 3); // 3 bytes = 24 clocks, dummy TX
+  // Single-phase SPI_Send: sends exactly 3 bytes (24 clocks), avoiding 48-clock overflow
+  SPI_Send(SPI1, 3, 0x000000u);
 
   delay_ns(150);   // last CLK low to CSN high (>= 40ns required)
   mt_csn_high();

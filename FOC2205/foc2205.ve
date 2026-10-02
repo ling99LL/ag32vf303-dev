@@ -49,7 +49,10 @@ spi1_miso_i    PIN_28:INPUT   # MT6701 DO -> bridge capture (input-safe pad)
 # ---- GPIO (free bits — GPIO2_x, NOT GPIO0_x) ----
 GPIO2_0        spi1_csn_g     # MT6701 CSN, firmware-timed (>=100ns setup)
 spi1_csn_go    PIN_14:OUTPUT  # logic pass-through to pad
-GPIO2_1        PIN_5          # DRV8316 nSLEEP (direct GPIO)
+GPIO2_1        PIN_5          # DRV8316 nSLEEP (direct GPIO, 10k pull-up on pad)
+GPIO2_2        PIN_15         # DRV8316 INL_A/B/C common enable (P0-3 fix: three DRV
+                              # INLx pins tied together to this pad + 10k pulldown.
+                              # LOW = PWM_MODE change allowed / 3x Hi-Z, HIGH = 3x drive)
 
 # ---- Debug serial console (die-fixed UART0 pads, not part of the 15) ----
 UART0_UARTTXD  PIN_20

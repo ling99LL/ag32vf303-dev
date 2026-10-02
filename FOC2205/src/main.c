@@ -30,7 +30,7 @@ static int drv_selftest(void)
 {
   drv_resp_t r2 = drv8316_read_reg(DRV_REG_CTRL2);
   drv_resp_t r6 = drv8316_read_reg(DRV_REG_CTRL6);
-  printf("DRV8316: CTRL2=0x%02x (want 0x7c) CTRL6=0x%02x (want 0x10) STAT=0x%02x\n",
+  printf("DRV8316: CTRL2=0x%02x (want 0x7c) CTRL6=0x%02x (want 0x11) STAT=0x%02x\n",
          r2.data, r6.data, r6.stat);
   if (r2.data != DRV_VAL_CTRL2 || r6.data != DRV_VAL_CTRL6) {
     printf("DRV8316 SPI readback FAIL (mode-1 bridge or wiring?)\n");
@@ -70,12 +70,14 @@ int main(void)
   pwm3ph_init();
   printf("PWM3ph ready: %u Hz, ARR=%u\n", (unsigned)PWM3PH_FREQ_HZ, (unsigned)PWM3PH_ARR);
 
-  // --- driver configuration ---
+  // --- driver configuration (CTRL2 write happens while INLx is LOW) ---
   drv8316_init();
   if (!drv_selftest()) {
     printf("HALT: fix SPI before enabling power stage\n");
     while (1) { }
   }
+  drv_inl_high();        // P0-3: release INLx only after the PWM_MODE write
+  printf("INLx released -> 3x PWM drive enabled\n");
 
   // --- encoder ---
   mt6701_init();
@@ -88,8 +90,13 @@ int main(void)
   current_init();
   printf("Izero: A=%d B=%d C=%d\n", g_cur_cal.off_a, g_cur_cal.off_b, g_cur_cal.off_c);
 
-  // --- FOC loop ---
+  // --- FOC loop & alignment ---
   foc_init(POLE_PAIRS);
+  printf("Aligning rotor to d-axis...\n");
+  foc_align_sensor();
+  printf("Zero angle offset: %d/1000 rad, sensor direction: %+d\n",
+         (int)(g_foc.zero_electric_angle * 1000.0f), (int)g_foc.sensor_direction);
+
   pwm3ph_on_update(foc_isr);
   pwm3ph_outputs(1);
   printf("FOC loop running\n");
@@ -98,8 +105,9 @@ int main(void)
   for (;;) {
     UTIL_IdleUs(500000);
     uint32_t now = s_isr_count;
-    printf("isr=%u ang=%d ib=%d crc_err=%u\n",
-           (unsigned)(now - last), (int)foc_last_angle(), (int)foc_last_iq(), 0u);
+    printf("isr=%u ang=%d ib=%d crc_err=%u dir=%+d\n",
+           (unsigned)(now - last), (int)foc_last_angle(), (int)foc_last_iq(),
+           (unsigned)foc_crc_errors(), (int)g_foc.sensor_direction);
     last = now;
 
     // bring-up hook: hold torque at 0 until the hand-feel layer drives g_foc.torque_q

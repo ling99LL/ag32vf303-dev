@@ -222,6 +222,7 @@
     alta::lconcat keep_files [list $logic_qsf $logic_qpf $supra_proj]
   }
 }
+Warn: Files for LOGIC preparation already exist in logic.
 > 
 > if { $skip_setup < 3 } {
   backup_files $keep_files
@@ -545,12 +546,7 @@ Loading architect libraries...
 ## CPU time: 0:0:0, REAL time: 0:0:0
 ## Memory Usage: 51MB (51MB)
 Info: Using device QSF template file C:/Users/Administrator/.platformio/packages/tool-agrv_logic/etc/AGRV2K_templ.qsf.
-Info: Can not find ASF file foc2205.asf, create a empty one.
-Info: Can not find pre-ASF file foc2205.pre.asf, create a empty one.
-Info: Can not find post-ASF file foc2205.post.asf, create a empty one.
-Info: Can not find pre_map-ASF file foc2205.pre_map.asf, create a empty one.
-Info: Can not find post_map-ASF file foc2205.post_map.asf, create a empty one.
 > 
 > exit
 
-Total 0 fatals, 0 errors, 0 warnings, 6 infos.
+Total 0 fatals, 0 errors, 1 warnings, 1 infos.

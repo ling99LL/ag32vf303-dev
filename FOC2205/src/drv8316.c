@@ -9,7 +9,8 @@ static uint16_t make_frame(int read, uint8_t addr, uint8_t data)
   p ^= (uint16_t)(p >> 2);
   p ^= (uint16_t)(p >> 1);
   w |= (uint16_t)((p & 1u) << 8);
-  return w;
+  // Byte swap for little-endian SPI transmission so command high byte goes first
+  return (uint16_t)((w << 8) | (w >> 8));
 }
 
 drv_resp_t drv8316_xfer(int read, uint8_t addr, uint8_t data)
@@ -17,7 +18,8 @@ drv_resp_t drv8316_xfer(int read, uint8_t addr, uint8_t data)
   drv_resp_t r;
   uint16_t w = make_frame(read, addr, data);
 
-  SPI_SendAndReceive(SPI0, 2, w, 2); // exactly 2 bytes = 16 clocks
+  // Single-phase SPI_Send sends exactly 2 bytes (16 clocks) without phase-1 clock doubling
+  SPI_Send(SPI0, 2, w);
   delay_ns(500);                     // spi_mode_wrap latch trails hard-SPI DONE
 
   uint16_t resp = (uint16_t)(SPIW_RXDATA0 & 0xFFFFu);
@@ -31,6 +33,10 @@ drv_resp_t drv8316_write_reg(uint8_t addr, uint8_t data) { return drv8316_xfer(0
 
 void drv8316_clear_faults(void)
 {
+  // Rewrites CTRL2 with its current intended value + CLR_FLT (W1C). This is
+  // only called from drv8316_init() while INLx is still LOW, so the PWM_MODE
+  // field inside stays compliant with the "INLx low when touching PWM_MODE"
+  // rule; never call it for a 6x->3x transition.
   drv8316_write_reg(DRV_REG_CTRL2, DRV_VAL_CTRL2 | 0x01); // CLR_FLT = W1C, self-clears
 }
 
@@ -48,8 +54,9 @@ void drv8316_init(void)
   delay_ms(50);   // TPwrUp (internal rails) + tREADY (1ms SPI ready) with margin
 
   drv8316_write_reg(DRV_REG_CTRL1, DRV_VAL_CTRL1_UNLOCK);
-  drv8316_write_reg(DRV_REG_CTRL6, DRV_VAL_CTRL6);   // BUCK_PS_DIS first!
+  drv8316_write_reg(DRV_REG_CTRL6, DRV_VAL_CTRL6);   // buck config first (0x11, see .h)
   drv8316_write_reg(DRV_REG_CTRL2, DRV_VAL_CTRL2);   // 3x mode + slew + push-pull SDO
+                                                     // (INLx is LOW here — Table 8-2 note)
   drv8316_write_reg(DRV_REG_CTRL5, DRV_VAL_CTRL5);   // CSA gain 0.6 V/A
   drv8316_write_reg(DRV_REG_CTRL10, DRV_VAL_CTRL10); // delay compensation
   drv8316_clear_faults();

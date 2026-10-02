@@ -6,7 +6,11 @@ static void (*s_update_isr)(void);
 
 void pwm3ph_init(void)
 {
-  // CR1: center-aligned mode 3 (up/down), ARR preload on
+  // CR1: center-aligned mode 3 (up/down), ARR preload on.
+  // P1-3: update events fire at BOTH overflow and underflow in this mode
+  // (40kHz for 20kHz PWM). We do NOT use RCR to thin them out: which edge
+  // RCR=1 lands on depends on enable order, and picking the wrong one would
+  // drop every valley. The ISR gates on the counter position instead.
   GPTIMER0->PSC  = 0;
   GPTIMER0->ARR  = PWM3PH_ARR;
   GPTIMER0->CR1  = (0x3u << GPTIMER_CR1_CMS_OFFSET) | GPTIMER_CR1_ARPE;
@@ -45,6 +49,11 @@ void pwm3ph_outputs(int on)
 
 void pwm3ph_set(int32_t ccr_a, int32_t ccr_b, int32_t ccr_c)
 {
+  // P0-4 修复：强制 0 ~ PWM3PH_ARR 饱和限幅，防止负数下溢转成 0xFFFFFFFF 造成 100% 满占空比直通
+  if (ccr_a < 0) ccr_a = 0; else if (ccr_a > (int32_t)PWM3PH_ARR) ccr_a = (int32_t)PWM3PH_ARR;
+  if (ccr_b < 0) ccr_b = 0; else if (ccr_b > (int32_t)PWM3PH_ARR) ccr_b = (int32_t)PWM3PH_ARR;
+  if (ccr_c < 0) ccr_c = 0; else if (ccr_c > (int32_t)PWM3PH_ARR) ccr_c = (int32_t)PWM3PH_ARR;
+
   GPTIMER0->CCR0 = (uint32_t)ccr_a;
   GPTIMER0->CCR1 = (uint32_t)ccr_b;
   GPTIMER0->CCR2 = (uint32_t)ccr_c;
@@ -53,6 +62,13 @@ void pwm3ph_set(int32_t ccr_a, int32_t ccr_b, int32_t ccr_c)
 static void pwm3ph_update_irq(void)
 {
   GPTIMER0->SR &= ~GPTIMER_SR_UIF; // clear update flag (write-0-to-clear)
+  // P1-3 valley gate: at the underflow (valley) event CNT has just wrapped to
+  // ~0 and counts up; at the overflow (peak) event CNT sits at ARR counting
+  // down. Only the valley has all low-side switches on (valid current sense)
+  // and starts a fresh PWM period.
+  if (GPTIMER0->CNT > (PWM3PH_ARR >> 1)) {
+    return;
+  }
   if (s_update_isr) {
     s_update_isr();
   }

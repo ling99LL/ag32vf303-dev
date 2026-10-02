@@ -43,6 +43,17 @@ $pio run -e foc2205 -t monitor      # 串口 printf (COM@115200)
 Quartus 0 errors；Supra 0 errors（setup slack +1.03ns @5ns 约束，hold 全正，覆盖 99.3%）；
 `logic/foc2205.bin` 22.6KB（压缩位流）。
 
+
+## 项目文档与审查
+
+- [硬件接线设计（docs/DRV8316+MT6701_FOC驱动板接线设计.md）](docs/DRV8316+MT6701_FOC驱动板接线设计.md)（**v4 审查整改版**：新增 PIN_15=INL_EN、独立 LDO 电源架构、MT6701 改挂 3.3V 主轨）
+- [项目审查与风险排查报告（docs/FOC2205_项目审查与风险排查报告.md）](docs/FOC2205_项目审查与风险排查报告.md)：详列 P0/P1/P2 共 10 项软硬件隐患及修复指南。
+- [审查问题解决方案与整改记录（docs/FOC2205_审查问题解决方案与整改记录.md）](docs/FOC2205_审查问题解决方案与整改记录.md)：逐条裁定（含对报告 4 处修法的修正）+ 规格书页码证据 + 落地状态。
+
+## 上板记录
+
+（待填：位流版本 / 首帧 CRC 结果 / 对齐 zero offset 与 direction / 电流零点 / 手感参数）
+
 ## 上板记录
 
 （待填：位流版本 / 首帧 CRC 结果 / 电流零点 / 手感参数）

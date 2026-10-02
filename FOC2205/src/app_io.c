@@ -2,8 +2,6 @@
 
 void delay_ns(uint32_t ns)
 {
-  // cycles = ns * SYSCLK_MHz / 1000; at 200MHz that is 5 cycles per 2.5ns...
-  // compute in 64-bit-free form: cycles = ns * (SYSCLK/1e6) / 1000
   uint32_t cycles = (SYS_GetSysClkFreq() / 1000000u) * ns / 1000u;
   if (cycles == 0) cycles = 1;
   uint32_t start = read_csr(cycle);
@@ -26,12 +24,19 @@ void delay_ms(uint32_t ms)
 
 void app_io_init(void)
 {
-  // GPIO2 bank: CSN + nSLEEP outputs
+  // GPIO2 bank: CSN + nSLEEP + INL_EN outputs
   PERIPHERAL_GPIO_ENABLE(GPIO2);
-  GPIO_SetSoftwareMode(MT_CSN_GPIO, MT_CSN_BIT | DRV_SLP_BIT); // plain GPIO, not AF
-  GPIO_SetOutput(MT_CSN_GPIO, MT_CSN_BIT | DRV_SLP_BIT);
+  GPIO_SetSoftwareMode(MT_CSN_GPIO, MT_CSN_BIT | DRV_SLP_BIT | DRV_INL_BIT); // plain GPIO, not AF
+  GPIO_SetOutput(MT_CSN_GPIO, MT_CSN_BIT | DRV_SLP_BIT | DRV_INL_BIT);
   mt_csn_high();   // deselect MT6701 (internally pulled up too)
-  drv_sleep();     // hold DRV8316 in sleep until drv8316_init()
+
+  // P1-2: never gate nSLEEP at boot — the DRV's buck/AVDD die in sleep, and a
+  // supply chain hanging off them would reset-loop. Hardware 10k pull-up keeps
+  // the DRV awake even while the MCU is in reset.
+  drv_wake();
+  // P0-3: INLx must be LOW when writing CTRL2.PWM_MODE (datasheet Table 8-2
+  // note). Kept low here; main() raises it after drv8316_init().
+  drv_inl_low();
 
   // SPI0 (DRV8316) and SPI1 (MT6701): enable clocks and route function
   // signals into the logic fabric (the .ve sends them through spi_mode_wrap).

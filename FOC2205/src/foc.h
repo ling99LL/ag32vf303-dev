@@ -11,23 +11,27 @@
 typedef struct
 {
   // electrical
-  int32_t id_ref_q;     // d-axis current target, Q12 amps
-  int32_t iq_ref_q;     // q-axis target (torque), Q12 amps
-  int32_t v_limit_q;    // voltage limit, Q12 volts
-  int32_t kp_q, ki_q;   // current loop gains (voltage mode uses feedforward)
+  int32_t id_ref_q;             // d-axis current target, Q12 amps
+  int32_t iq_ref_q;             // q-axis target (torque), Q12 amps
+  int32_t v_limit_q;            // voltage limit, Q12 volts
+  int32_t kp_q, ki_q;           // current loop gains (voltage mode uses feedforward)
   uint16_t pole_pairs;
+  float zero_electric_angle;    // P1-1 修复：标定的电角度初相偏置 (rad)
+  int8_t sensor_direction;      // 传感器与电机旋转方向 (+1 或 -1)
   // hand-feel layer outputs (filled by the knob logic, consumed here)
-  int32_t torque_q;     // external torque command, Q12
-  uint8_t brake;        // 1 = short phases (parking brake)
+  int32_t torque_q;             // external torque command, Q12
+  uint8_t brake;                // 1 = short phases (parking brake)
 } foc_params_t;
 
 extern foc_params_t g_foc;
 
 void foc_init(uint16_t pole_pairs);
+void foc_align_sensor(void);    // P1-1 修复：开环对齐转子 d 轴并标定零位电角度
 // Called from the PWM update ISR
 void foc_step_isr(void);
 // Read-only status for diagnostics
 int32_t foc_last_angle(void);
 int32_t foc_last_iq(void);
+uint32_t foc_crc_errors(void);
 
 #endif

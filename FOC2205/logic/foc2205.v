@@ -4,6 +4,7 @@
 
 module foc2205 (
   GPIO2_1,
+  GPIO2_2,
   GPTIMER0_BRK,
   GPTIMER0_CH0,
   GPTIMER0_CH1,
@@ -22,6 +23,7 @@ module foc2205 (
   spi1_sck_o
 );
 inout         GPIO2_1;
+inout         GPIO2_2;
 input         GPTIMER0_BRK;
 inout         GPTIMER0_CH0;
 inout         GPTIMER0_CH1;
@@ -38,6 +40,12 @@ output        spi0_sck_o;
 output        spi1_csn_go;
 input         spi1_miso_i;
 output        spi1_sck_o;
+
+// GPIO2_2, GPIO2_2
+assign PIN_15_in = GPIO2_2;
+wire PIN_15_out_en;
+wire PIN_15_out_data;
+assign GPIO2_2 = PIN_15_out_en ? PIN_15_out_data : 1'bz;
 
 // UART0_UARTTXD, GPIO7_6
 wire PIN_20_out_en;
@@ -360,7 +368,9 @@ assign spi1_csn_g_out_data = gpio2_io_out_data[0];
 assign spi1_csn_g_out_en = gpio2_io_out_en[0];
 assign PIN_5_out_data = gpio2_io_out_data[1];
 assign PIN_5_out_en = gpio2_io_out_en[1];
-(* keep = 1 *) wire [7:0] gpio2_io_in = {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PIN_5_in, spi1_csn_g_in};
+assign PIN_15_out_data = gpio2_io_out_data[2];
+assign PIN_15_out_en = gpio2_io_out_en[2];
+(* keep = 1 *) wire [7:0] gpio2_io_in = {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, PIN_15_in, PIN_5_in, spi1_csn_g_in};
 
 wire [7:0] gpio3_io_out_data;
 wire [7:0] gpio3_io_out_en;

@@ -19,9 +19,15 @@
 // MT6701 CSN on GPIO2 bit 0
 #define MT_CSN_GPIO   GPIO2
 #define MT_CSN_BIT    GPIO_BIT0
-// DRV8316 nSLEEP on GPIO2 bit 1
+// DRV8316 nSLEEP on GPIO2 bit 1 (external 10k pull-up keeps the DRV awake
+// through MCU reset — its buck/AVDD die in sleep, so never gate the supply)
 #define DRV_SLP_GPIO  GPIO2
 #define DRV_SLP_BIT   GPIO_BIT1
+// DRV8316 INLA/B/C common enable on GPIO2 bit 2 (P0-3 fix: the three INLx
+// pins are tied together to PIN_15 with a 10k pulldown). LOW = PWM_MODE
+// register change allowed and 3x mode reads Hi-Z; HIGH = 3x drive active.
+#define DRV_INL_GPIO  GPIO2
+#define DRV_INL_BIT   GPIO_BIT2
 
 void app_io_init(void);            // GPIO + AF + SPI0/SPI1 clocks and dividers
 
@@ -29,6 +35,8 @@ static inline void mt_csn_low(void)  { GPIO_SetLow (MT_CSN_GPIO, MT_CSN_BIT); }
 static inline void mt_csn_high(void) { GPIO_SetHigh(MT_CSN_GPIO, MT_CSN_BIT); }
 static inline void drv_sleep(void)   { GPIO_SetLow (DRV_SLP_GPIO, DRV_SLP_BIT); }
 static inline void drv_wake(void)    { GPIO_SetHigh(DRV_SLP_GPIO, DRV_SLP_BIT); }
+static inline void drv_inl_low(void) { GPIO_SetLow (DRV_INL_GPIO, DRV_INL_BIT); }
+static inline void drv_inl_high(void){ GPIO_SetHigh(DRV_INL_GPIO, DRV_INL_BIT); }
 
 // Busy-wait helpers (rdcycle-based; SYSCLK = 200MHz -> 5 cycles/ns)
 void delay_ns(uint32_t ns);

@@ -24,7 +24,9 @@
 
 // Init values (see docs §6; do not change without re-reading the datasheet)
 #define DRV_VAL_CTRL1_UNLOCK  0x03  // REG_LOCK = 011b
-#define DRV_VAL_CTRL6         0x10  // BUCK_PS_DIS=1 (mandatory) + BUCK_SEL=00b (3.3V)
+#define DRV_VAL_CTRL6         0x11  // BUCK_PS_DIS=1 (AVDD from VM) + BUCK_DIS=1: the buck
+                                      // network is unpopulated — the MCU runs on its own LDO,
+                                      // and the buck dies in nSLEEP sleep anyway (P1-2 fix)
 #define DRV_VAL_CTRL2         0x7C  // res=01, SDO push-pull, SLEW=200V/us, PWM_MODE=3x
 #define DRV_VAL_CTRL5         0x02  // CSA_GAIN = 0.6 V/A
 #define DRV_VAL_CTRL10        0x15  // DLYCMP_EN + DLY_TARGET=1.2us (for 200V/us)
