@@ -1,0 +1,13 @@
+[GuiMigrateQuartusPage]
+verilogFiles=foc2205.v, analog_ip.v
+
+[GuiMigrateSetupPage]
+design=foc2205
+device=AGRV2KQ32
+flowInline=force
+
+[GuiMigrateRunPage]
+fitting=1
+fitter=5
+effort=2
+skew=2

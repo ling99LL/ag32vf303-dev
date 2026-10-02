@@ -1,0 +1,56 @@
+##############################################################################
+# FOC2205 pin map — AG32VF303KCU6 (QFN32, logic_device = AGRV2KQ32)
+#
+# 15 user-assignable pads: 5 7 8 9 10 11 12 13 14 18 19 26 28 29 31
+# UART0 debug console lives on die pads PIN_20/21 (outside the 15).
+#
+# KEY POINTS (do not "simplify" without reading docs/DRV8316+MT6701_FOC驱动板接线设计.md):
+#  * Hard SPI is fixed mode 0. MT6701 SSI and DRV8316 SPI both need mode 1
+#    (sample on falling edge), so SPI0/SPI1 route THROUGH the logic fabric
+#    into spi_mode_wrap (mode-1 bridge) instead of straight to pads.
+#  * GPIO0_0/GPIO0_1 are the SAME physical bits as SPI0_SI_IO0/SPI0_SO_IO1
+#    (see etc/gen_vlog FUNC_PINS). CSN/nSLEEP therefore use free bits GPIO2_0/
+#    GPIO2_1 — never GPIO0_0/GPIO0_1 here.
+#  * PIN_26 (JTDI) and PIN_28 (JNTRST) are input-safe but output-untested:
+#    only inputs are placed there (BRK in, MISO in). All outputs are on
+#    plain-IO pads.
+#  * PIN_10/11/12 = ADC_IN3/IN4/IN5 fixed analog pads -> current sensing.
+#    No .ve line needed or possible for ADC channels; DAC0/DAC1 share
+#    PIN_11/12 and are disabled in logic/analog_ip.v (ENABLE_DAC0/1 = 0).
+##############################################################################
+
+SYSCLK 200
+BUSCLK 100
+HSECLK 8
+
+# ---- Three-phase PWM, direct (3x PWM mode -> DRV8316 INHA/B/C) ----
+GPTIMER0_CH0   PIN_7          # PWM_A -> INHA
+GPTIMER0_CH1   PIN_8          # PWM_B -> INHB
+GPTIMER0_CH2   PIN_9          # PWM_C -> INHC
+
+# ---- Hardware brake: nFAULT (open drain, low = fault) -> GPTIMER0_BRK ----
+GPTIMER0_BRK   PIN_26         # input-only pad, BRK polarity = low (BKP=0)
+
+# ---- SPI0 -> mode-1 bridge -> DRV8316C (6.25 MHz, 16-clock frames) ----
+SPI0_SCK       spi0_sck_f     # MCU function -> logic wire
+SPI0_SI_IO0    spi0_mosi_f:OUTPUT
+SPI0_CSN       spi0_csn_f
+spi0_sck_o     PIN_18:OUTPUT  # bridge output -> DRV8316 SCLK
+spi0_mosi_o    PIN_19:OUTPUT  # bridge output -> DRV8316 SDI
+spi0_csn_o     PIN_31:OUTPUT  # bridge output -> DRV8316 nSCS (shaped)
+spi0_miso_i    PIN_29:INPUT   # DRV8316 SDO -> bridge capture
+
+# ---- SPI1 -> mode-1 bridge -> MT6701 SSI (12.5 MHz, 24-clock frames) ----
+SPI1_SCK       spi1_sck_f
+SPI1_CSN       spi1_csn_f     # used only as bridge gate (CSN itself = GPIO2_0)
+spi1_sck_o     PIN_13:OUTPUT  # bridge output -> MT6701 CLK
+spi1_miso_i    PIN_28:INPUT   # MT6701 DO -> bridge capture (input-safe pad)
+
+# ---- GPIO (free bits — GPIO2_x, NOT GPIO0_x) ----
+GPIO2_0        spi1_csn_g     # MT6701 CSN, firmware-timed (>=100ns setup)
+spi1_csn_go    PIN_14:OUTPUT  # logic pass-through to pad
+GPIO2_1        PIN_5          # DRV8316 nSLEEP (direct GPIO)
+
+# ---- Debug serial console (die-fixed UART0 pads, not part of the 15) ----
+UART0_UARTTXD  PIN_20
+UART0_UARTRXD  PIN_21
