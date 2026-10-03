@@ -45,6 +45,7 @@ sincos LUT）；prelogic 0 错 0 警；Quartus 0 errors；Supra 0 errors；`logi
 
 ## 项目文档与审查
 
+- [元件引脚连接网表（docs/FOC2205_元件引脚连接网表.md）](docs/FOC2205_元件引脚连接网表.md)（**v1.0**：元件间信号互连 + 简化网标命名，电源部分除外；画原理图以此为准）
 - [硬件接线设计（docs/DRV8316+MT6701_FOC驱动板接线设计.md）](docs/DRV8316+MT6701_FOC驱动板接线设计.md)（**v6.1**：INL_EN=PIN_28/JNTRST（2 线 DAPLink 零影响）、BOOT1 纯净 10k 下拉、独立 LDO 电源架构、BRK/DO 移至 PIN_22/23）
 - [QFN32 芯片引脚评估与分配规范（docs/FOC2205_QFN32芯片引脚评估与分配规范.md）](docs/FOC2205_QFN32芯片引脚评估与分配规范.md)（V3.1：原生定义经 DAPLink 手册逐脚核对，含 INL_EN=PIN_28 复用记录）
 - [审查结果交付文档（docs/FOC2205_审查结果交付文档.md）](docs/FOC2205_审查结果交付文档.md)：两轮审查整改交付记录。
