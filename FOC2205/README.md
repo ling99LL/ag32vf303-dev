@@ -18,7 +18,7 @@ AG32VF303KCU6 (QFN32) + MT6701QT-STD + DRV8316C 三芯片 FOC 驱动板 —— �
 FOC2205/
 ├── platformio.ini     构建配置（foc2205 env）
 ├── foc2205.ve         引脚映射（改它必须 buildlogic + logic + upload）
-├── docs/              硬件接线设计文档、审查排查报告与深度分析报告
+├── docs/              硬件接线设计、QFN32 引脚规范、审查交付记录
 ├── logic/             CPLD 逻辑：analog_ip（ADC×3）+ spi_mode_wrap（mode-1 桥×2）
 └── src/               固件：board / pwm3ph / drv8316 / mt6701 / current / foc / main
 ```
@@ -46,10 +46,10 @@ sincos LUT）；prelogic 0 错 0 警；Quartus 0 errors；Supra 0 errors；`logi
 ## 项目文档与审查
 
 - [硬件接线设计（docs/DRV8316+MT6701_FOC驱动板接线设计.md）](docs/DRV8316+MT6701_FOC驱动板接线设计.md)（**v6.1**：INL_EN=PIN_28/JNTRST（2 线 DAPLink 零影响）、BOOT1 纯净 10k 下拉、独立 LDO 电源架构、BRK/DO 移至 PIN_22/23）
-- [项目审查与风险排查报告（docs/FOC2205_项目审查与风险排查报告.md）](docs/FOC2205_项目审查与风险排查报告.md)：第一轮 P0/P1/P2 共 10 项软硬件隐患及修复指南。
-- [审查问题解决方案与整改记录（docs/FOC2205_审查问题解决方案与整改记录.md）](docs/FOC2205_审查问题解决方案与整改记录.md)：两轮共 16 条的逐条裁定（含对报告 5 处修法的修正/驳回）+ 规格书页码证据 + 落地状态。
-- [深度审查与系统级隐患排查报告（docs/FOC2205_深度审查与系统级隐患排查报告.md）](docs/FOC2205_深度审查与系统级隐患排查报告.md)：第二轮 D-1~D-6（REG_LOCK、libm 栈抖动、SVPWM、ADC 轮询、APB 竞态、BRK 假刹车）。
-- [审查结果交付文档（docs/FOC2205_审查结果交付文档.md）](docs/FOC2205_审查结果交付文档.md)：第二轮整改交付记录（编码已修复）。
+- [QFN32 芯片引脚评估与分配规范（docs/FOC2205_QFN32芯片引脚评估与分配规范.md）](docs/FOC2205_QFN32芯片引脚评估与分配规范.md)（V3.1：原生定义经 DAPLink 手册逐脚核对，含 INL_EN=PIN_28 复用记录）
+- [审查结果交付文档（docs/FOC2205_审查结果交付文档.md）](docs/FOC2205_审查结果交付文档.md)：两轮审查整改交付记录。
+
+> 两轮审查报告（P0/P1/P2 共 10 项、D-1~D-6 共 6 项）与逐条裁定整改记录已于 2026-10-03 移出仓库树，结论均已落地到代码与接线设计；原文可在 git 历史追溯（引入于 29bc30d / 2aa56b1）。
 
 ## 上板记录
 
