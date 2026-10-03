@@ -39,13 +39,13 @@ $pio run -e foc2205 -t upload       # 烧固件（自动校验 logic）
 $pio run -e foc2205 -t monitor      # 串口 printf (COM@115200)
 ```
 
-构建验证记录（2026-10-02，两轮审查整改后复测）：固件编译通过（Flash 14.1KB，RAM 3.8KB，含
+构建验证记录（2026-10-03，v6.1 INL_EN→PIN_28 复测）：固件编译通过（Flash 14.1KB，RAM 3.8KB，含
 sincos LUT）；prelogic 0 错 0 警；Quartus 0 errors；Supra 0 errors；`logic/foc2205.bin`
-23.1KB（压缩位流，含 PIN_15/22/23 新布局）。
+22.4KB（22985 字节，压缩位流，含 PIN_28/22/23 布局，GPIO2_2=PIN_28 网表已核）。
 
 ## 项目文档与审查
 
-- [硬件接线设计（docs/DRV8316+MT6701_FOC驱动板接线设计.md）](docs/DRV8316+MT6701_FOC驱动板接线设计.md)（**v5**：PIN_15=INL_EN、独立 LDO 电源架构、BRK/DO 移至 PIN_22/23、JTAG 五脚全留调试）
+- [硬件接线设计（docs/DRV8316+MT6701_FOC驱动板接线设计.md）](docs/DRV8316+MT6701_FOC驱动板接线设计.md)（**v6.1**：INL_EN=PIN_28/JNTRST（2 线 DAPLink 零影响）、BOOT1 纯净 10k 下拉、独立 LDO 电源架构、BRK/DO 移至 PIN_22/23）
 - [项目审查与风险排查报告（docs/FOC2205_项目审查与风险排查报告.md）](docs/FOC2205_项目审查与风险排查报告.md)：第一轮 P0/P1/P2 共 10 项软硬件隐患及修复指南。
 - [审查问题解决方案与整改记录（docs/FOC2205_审查问题解决方案与整改记录.md）](docs/FOC2205_审查问题解决方案与整改记录.md)：两轮共 16 条的逐条裁定（含对报告 5 处修法的修正/驳回）+ 规格书页码证据 + 落地状态。
 - [深度审查与系统级隐患排查报告（docs/FOC2205_深度审查与系统级隐患排查报告.md）](docs/FOC2205_深度审查与系统级隐患排查报告.md)：第二轮 D-1~D-6（REG_LOCK、libm 栈抖动、SVPWM、ADC 轮询、APB 竞态、BRK 假刹车）。

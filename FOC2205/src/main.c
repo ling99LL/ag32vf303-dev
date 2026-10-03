@@ -24,8 +24,9 @@ static void bringup_banner(void)
   printf("SYSCLK=%u BUSCLK=%u\n",
          (unsigned)SYS_GetSysClkFreq(),
          (unsigned)BOARD_BUS_FREQUENCY);
-  // BOOT1(PIN_15) is shared with INL_EN: verify the reset latch took FLASH
-  // (0) despite the pin being driven later — expected "BootMode=0"
+  // BOOT1(PIN_15) is 100% UNTOUCHED and dedicated to boot strap (10k pulldown).
+  // INL_EN sits on PIN_28 (JNTRST pad) — DAPLink uses 2-wire Compact-JTAG, so
+  // debugging is unaffected; an external 10k pulldown owns the pad at reset.
   printf("BootMode=%d (0=FLASH 1=UARTloader 3=SRAM)\n", (int)SYS_GetBootMode());
 }
 

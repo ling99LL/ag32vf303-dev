@@ -24,8 +24,9 @@
 #define DRV_SLP_GPIO  GPIO2
 #define DRV_SLP_BIT   GPIO_BIT1
 // DRV8316 INLA/B/C common enable on GPIO2 bit 2 (P0-3 fix: the three INLx
-// pins are tied together to PIN_15 with a 10k pulldown). LOW = PWM_MODE
-// register change allowed and 3x mode reads Hi-Z; HIGH = 3x drive active.
+// pins are tied together to PIN_28/JNTRST with a 10k pulldown — DAPLink's
+// 2-wire Compact-JTAG never touches nTRST, so debugging is unaffected).
+// LOW = PWM_MODE register change allowed and 3x mode reads Hi-Z; HIGH = 3x drive active.
 #define DRV_INL_GPIO  GPIO2
 #define DRV_INL_BIT   GPIO_BIT2
 

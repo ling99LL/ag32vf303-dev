@@ -1,9 +1,10 @@
 ##############################################################################
 # FOC2205 pin map — AG32VF303KCU6 (QFN32, logic_device = AGRV2KQ32)
 #
-# ZERO JTAG OCCUPANCY & ZERO CRYSTAL OCCUPANCY:
-#  * JTAG 5 pins completely reserved for debugger:
-#    PIN_24 (JTMS), PIN_25 (JTCK), PIN_26 (JTDI), PIN_27 (JTDO), PIN_28 (JNTRST)
+# ZERO CRYSTAL OCCUPANCY & JTAG DEBUG UNAFFECTED:
+#  * Debugger pins reserved: PIN_24 (JTMS), PIN_25 (JTCK), PIN_26 (JTDI), PIN_27 (JTDO).
+#    DAPLink talks 2-wire Compact-JTAG (TCK/TMS) only; PIN_28 (JNTRST) is free to
+#    reuse (TAP reset also works via 5 TMS-high clocks, nTRST is optional).
 #  * Crystal 2 pins completely reserved for HSE oscillator:
 #    PIN_2 (OSC_IN), PIN_3 (OSC_OUT)
 #  * Hard SPI is fixed mode 0. MT6701 SSI and DRV8316 SPI both need mode 1,
@@ -12,7 +13,7 @@
 #  * PIN_10/11/12 = ADC_IN3/IN4/IN5 fixed analog pads -> current sensing.
 #  * PIN_22/PIN_23 (USBDM/USBDP IO pads) used for BRK and MT6701 MISO.
 #  * UART0 debug console on die pads PIN_20/21.
-#  * PIN_1 is spare.
+#  * PIN_28 (JNTRST) used for DRV8316 INL_ALL; PIN_1 freed; PIN_15/BOOT1 100% free.
 ##############################################################################
 
 SYSCLK 200
@@ -48,7 +49,7 @@ spi1_miso_i    PIN_23:INPUT   # MT6701 DO -> bridge capture
 GPIO2_0        spi1_csn_g     # MT6701 CSN, firmware-timed (>=100ns setup)
 spi1_csn_go    PIN_14:OUTPUT  # logic pass-through to pad
 GPIO2_1        PIN_5          # DRV8316 nSLEEP (direct GPIO, 10k pull-up on pad)
-GPIO2_2        PIN_15         # DRV8316 INL_A/B/C common enable (P0-3 fix)
+GPIO2_2        PIN_28         # DRV8316 INL_A/B/C common enable (PIN_1 -> PIN_28/JNTRST)
 
 # ---- Debug serial console (die-fixed UART0 pads) ----
 UART0_UARTTXD  PIN_20
