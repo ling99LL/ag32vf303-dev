@@ -162,3 +162,14 @@ C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t
 6. **实时间隔行程压缩 (SUMP RLE Compression)**：
    - 固件支持 SUMP RLE (Run-Length Encoding) 协议规范（Flags  x0100）。
    - 对低频信号或方波平台进行实时流式游程编码，经实测 100kHz 测试方波压缩比达到 **10.78倍**（1024 字节压缩至 95 字节），突破 USB CDC 带宽与 BRAM 深度瓶颈，支持 PulseView 超长周期连续抓取。
+7. **CPLD 硬件环形预触发深度缓存 (Circular Pre-Trigger Buffer)**：
+   - 采样引擎在 ARM 状态下立即启动对 CPLD Block RAM 的环形预采样（写指针自动在目标深度内循环回滚）。
+   - 触发事件到来时，CPLD 自动将触发发生瞬间的写指针锁存至 `REG_TRIG_POS` (`0x60000014`)，并继续采样由 `REG_POST_WORDS` (`0x60000018`) 指定的后触发字数。
+   - 彻底解决“只能捕获触发后波形、无法观测触发前因果信号”的行业通病，完整支持 PulseView 设置 1%~99% 预触发比例。
+8. **自测方波频率自适应动态缩放 (Adaptive Scope Test Wave)**：
+   - 固件在执行不同采样时基时，动态计算并写入 `CPLD_REG_TEST_DIV` (`0x6000000C`)：
+     - 100 MSa/s 档位输出 1 MHz 方波；
+     - 50 MSa/s 档位输出 500 kHz 方波；
+     - 10 MSa/s 档位输出 100 kHz 方波；
+     - 低速档位自动降频至 20 kHz。
+   - 保证上位机在任何时基窗口下均可直观观测到周期清晰、占空比均衡的自检波形。
