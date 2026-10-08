@@ -88,6 +88,7 @@ static inline void set_all_leds(int on) {
 #define SUMP_FLAGS            0x82
 
 static uint32_t sample_limit   = 8192;
+static uint32_t sample_delay   = 0;
 static uint32_t trigger_mask   = 0;
 static uint32_t trigger_val    = 0;
 static uint32_t sample_divider = 0;
@@ -430,7 +431,9 @@ static void process_sump_byte(uint8_t b) {
         sample_divider = val24;
       } else if (op == SUMP_CAPTURE_SIZE) {
         uint16_t readcount = (cmd_buf[2] << 8) | cmd_buf[1];
+        uint16_t delaycount = (cmd_buf[4] << 8) | cmd_buf[3];
         sample_limit = (readcount + 1) * 4;
+        sample_delay = (delaycount + 1) * 4;
       } else if (op >= 0xC0 && op <= 0xCF) {
         // Accept all SUMP trigger mask / value stages (Stage 0..3)
         uint32_t val32 = (cmd_buf[4] << 24) | (cmd_buf[3] << 16) | (cmd_buf[2] << 8) | cmd_buf[1];
