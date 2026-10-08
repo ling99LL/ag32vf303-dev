@@ -289,16 +289,11 @@ static void execute_capture(void) {
     set_led(LED_CAP_BIT, 0);
     set_led(LED_TX_BIT, 1); // PIN_18 ON
 
-    // Circular BRAM alignment:
-    // Read the trigger word position recorded by CPLD
-    uint32_t trig_word = (CPLD_REG_TRIG_POS >> 16) & 0x3FF;
-    // Calculate newest written word index in the circular buffer
-    uint32_t newest_word = (trig_word + post_words) % words_needed;
-
-    // Unpack in reverse chronological order from newest_word down
+    // Direct reverse unpacking from BRAM (Zero-Copy inversion)
+    // CPLD stored samples linearly: word 0 contains samples 0..7 (sample 0 at bits 3:0).
+    // SUMP expects reverse chronological order: latest sample first!
     int32_t target_idx = 0;
-    for (uint32_t step = 0; step < words_needed; step++) {
-      uint32_t w = (newest_word + words_needed - 1 - step) % words_needed;
+    for (int32_t w = (int32_t)words_needed - 1; w >= 0; w--) {
       uint32_t word = CPLD_RAM_BASE[w];
       for (int nibble = 7; nibble >= 0; nibble--) {
         if (target_idx < (int32_t)count) {

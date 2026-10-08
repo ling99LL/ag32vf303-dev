@@ -140,14 +140,12 @@ module analog_ip (
       ram_wr_en <= 1'b0;
 
       if (!sampler_arm) begin
-        busy          <= 1'b0;
-        done          <= 1'b0;
-        triggered     <= 1'b0;
-        post_sampling <= 1'b0;
-        post_cnt      <= 16'd0;
-        div_cnt       <= 8'd0;
-        sub_idx       <= 3'd0;
-        word_idx      <= 16'd0;
+        busy      <= 1'b0;
+        done      <= 1'b0;
+        triggered <= 1'b0;
+        div_cnt   <= 8'd0;
+        sub_idx   <= 3'd0;
+        word_idx  <= 16'd0;
       end else if (busy) begin
         if (div_cnt < sample_clk_div) begin
           div_cnt <= div_cnt + 8'd1;
@@ -160,36 +158,22 @@ module analog_ip (
             ram_wr_data <= {ch_raw, shift_buf[31:4]};
             ram_wr_addr <= word_idx[9:0];
             ram_wr_en   <= 1'b1;
+            word_idx    <= word_idx + 16'd1;
 
             if (word_idx >= sample_depth_words - 16'd1) begin
-              word_idx <= 16'd0;
-            end else begin
-              word_idx <= word_idx + 16'd1;
-            end
-
-            if (!triggered && (sampler_force || trig_mask == 4'd0 || trig_match)) begin
-              triggered     <= 1'b1;
-              trig_pos      <= word_idx[9:0];
-              post_sampling <= 1'b1;
-              post_cnt      <= 16'd1;
-            end else if (post_sampling) begin
-              if (post_cnt >= post_trig_words) begin
-                busy          <= 1'b0;
-                done          <= 1'b1;
-                post_sampling <= 1'b0;
-              end else begin
-                post_cnt <= post_cnt + 16'd1;
-              end
+              busy <= 1'b0;
+              done <= 1'b1;
             end
           end
         end
       end else if (!done) begin
-        busy          <= 1'b1;
-        div_cnt       <= 8'd0;
-        sub_idx       <= 3'd0;
-        word_idx      <= 16'd0;
-        post_sampling <= 1'b0;
-        post_cnt      <= 16'd0;
+        if (sampler_force || trig_mask == 4'd0 || trig_match) begin
+          triggered <= 1'b1;
+          busy      <= 1'b1;
+          div_cnt   <= 8'd0;
+          sub_idx   <= 3'd0;
+          word_idx  <= 16'd0;
+        end
       end
     end
   end
