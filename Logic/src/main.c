@@ -300,7 +300,39 @@ static void execute_capture(void) {
   // Stream data over USB CDC with 64-byte packet optimization and timeout guard
   uint32_t tx_start = UTIL_GetTick();
 
-  if (groups == 1) {
+  if (rle_enabled && groups == 1) {
+    // Standard SUMP RLE (Run-Length Encoding) Compression:
+    // When a sample repeats, emit: Sample | 0x80 (if count repeats) or count bytes
+    // In SUMP: bit 7 = 1 indicates repeat count payload, bit 7 = 0 indicates sample value
+    uint32_t idx = 0;
+    while (idx < count) {
+      tud_task();
+      uint8_t cur_val = sample_buffer[idx] & 0x0F;
+      uint32_t run_len = 1;
+      while ((idx + run_len) < count && (sample_buffer[idx + run_len] & 0x0F) == cur_val && run_len < 0x3FFF) {
+        run_len++;
+      }
+      idx += run_len;
+
+      // Send the sample
+      comm_send_byte(cur_val);
+
+      // If repeated, send count with bit 7 set
+      if (run_len > 1) {
+        uint32_t repeats = run_len - 1;
+        while (repeats > 0) {
+          uint8_t chunk = repeats & 0x7F;
+          repeats >>= 7;
+          if (repeats > 0) {
+            comm_send_byte(0x80 | chunk);
+          } else {
+            comm_send_byte(0x80 | chunk);
+          }
+        }
+      }
+      if (UTIL_GetTick() - tx_start > 1000) break;
+    }
+  } else if (groups == 1) {
     uint32_t sent = 0;
     while (sent < count) {
       tud_task();
