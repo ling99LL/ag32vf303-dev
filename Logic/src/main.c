@@ -396,10 +396,14 @@ static void process_sump_byte(uint8_t b) {
       } else if (op == SUMP_CAPTURE_SIZE) {
         uint16_t readcount = (cmd_buf[2] << 8) | cmd_buf[1];
         sample_limit = (readcount + 1) * 4;
-      } else if (op == SUMP_TRIGGER_MASK_0) {
-        trigger_mask = (cmd_buf[4] << 24) | (cmd_buf[3] << 16) | (cmd_buf[2] << 8) | cmd_buf[1];
-      } else if (op == SUMP_TRIGGER_VAL_0) {
-        trigger_val = (cmd_buf[4] << 24) | (cmd_buf[3] << 16) | (cmd_buf[2] << 8) | cmd_buf[1];
+      } else if (op >= 0xC0 && op <= 0xCF) {
+        // Accept all SUMP trigger mask / value stages (Stage 0..3)
+        uint32_t val32 = (cmd_buf[4] << 24) | (cmd_buf[3] << 16) | (cmd_buf[2] << 8) | cmd_buf[1];
+        if ((op & 0x03) == 0x00) {
+          trigger_val = val32;
+        } else if ((op & 0x03) == 0x01) {
+          trigger_mask = val32;
+        }
       } else if (op == SUMP_FLAGS) {
         uint16_t flags = (cmd_buf[2] << 8) | cmd_buf[1];
         if ((flags & 0x3C) != 0) {
