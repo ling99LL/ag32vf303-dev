@@ -213,8 +213,10 @@ static void execute_capture(void) {
     uint32_t eff_div = sample_divider & 0x7FFFFFFF;
     uint32_t clk_div = (eff_div > 0) ? (eff_div & 0xFF) : 0;
 
-    // ARM CPLD Sampler
-    uint32_t ctrl_val = (1 << 0) | (1 << 3) | ((uint32_t)mask << 4) | ((uint32_t)val << 8) | (clk_div << 16);
+    // ARM CPLD Sampler (bit 0=ARM, bit 3=TEST_EN, bits [7:4]=mask, bits [11:8]=val, bit 12=edge_mode, bits [23:16]=clk_div)
+    // If mask is set and edge mode requested, or default edge detection on masked channel
+    uint32_t edge_bit = (mask != 0) ? (1 << 12) : 0;
+    uint32_t ctrl_val = (1 << 0) | (1 << 3) | ((uint32_t)mask << 4) | ((uint32_t)val << 8) | edge_bit | (clk_div << 16);
     CPLD_REG_CTRL = ctrl_val;
 
     // Wait for trigger and capture with continuous USB servicing and abort checking

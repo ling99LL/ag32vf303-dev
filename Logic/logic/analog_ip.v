@@ -81,6 +81,7 @@ module analog_ip (
   reg        sampler_force = 1'b0;
   reg [3:0]  trig_mask = 4'd0;
   reg [3:0]  trig_val  = 4'd0;
+  reg        trig_edge_en = 1'b0;
   reg [15:0] sample_depth_words = 16'd1024; // 1024 words * 8 = 8192 samples
   reg [7:0]  sample_clk_div = 8'd0;
 
@@ -104,7 +105,22 @@ module analog_ip (
     end
   end
 
-  wire trig_match = ((ch_raw & trig_mask) == (trig_val & trig_mask));
+  // Edge & Level Trigger Engine
+  reg [3:0] ch_prev = 4'd0;
+  always @(posedge sys_clock) begin
+    ch_prev <= ch_raw;
+  end
+
+  // Level match: (ch_raw & mask) == (val & mask)
+  // Edge match (when bit 12 of REG_CTRL is set):
+  //   if trig_val bit is 1 -> Rising Edge: (ch_prev==0 && ch_raw==1)
+  //   if trig_val bit is 0 -> Falling Edge: (ch_prev==1 && ch_raw==0)
+  wire [3:0] ch_rising  = (~ch_prev) & ch_raw;
+  wire [3:0] ch_falling = ch_prev & (~ch_raw);
+  wire [3:0] ch_edge    = (ch_rising & trig_val) | (ch_falling & ~trig_val);
+  
+  wire trig_edge_mode = trig_edge_en;
+  wire trig_match = trig_edge_mode ? (| (ch_edge & trig_mask)) : (((ch_raw & trig_mask) == (trig_val & trig_mask)));
 
   always @(posedge sys_clock or negedge resetn) begin
     if (!resetn) begin
