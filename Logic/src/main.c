@@ -364,8 +364,10 @@ static void execute_capture(void) {
           if (to_send > avail) to_send = avail;
           uint32_t n = tud_cdc_write(&sample_buffer[sent], to_send);
           sent += n;
-          tud_cdc_write_flush();
-          tx_start = UTIL_GetTick(); // Refresh timeout
+          if (sent >= count || avail <= 64) {
+            tud_cdc_write_flush();
+          }
+          tx_start = UTIL_GetTick();
         }
       } else {
         while (sent < count) {
@@ -373,7 +375,6 @@ static void execute_capture(void) {
           UART_TransmitData(UART0, sample_buffer[sent++]);
         }
       }
-      // Watchdog escape if USB disconnected during send
       if (UTIL_GetTick() - tx_start > 500) {
         break;
       }
