@@ -435,6 +435,8 @@ static void execute_capture(void) {
   }
   comm_flush();
 
+  // Activity Stretch: ensure LED4 transmission flash is clearly visible to human eye
+  UTIL_IdleMs(35);
   set_led(LED_TX_BIT, 0);
   set_led(LED_IDLE_BIT, 1); // PIN_12 ON
 }
@@ -521,18 +523,19 @@ int main(void) {
   GPIO_SetOutput(LED_GPIO, ALL_LEDS);
   set_all_leds(0);
 
-  // Startup LED Self-Test
+  // Startup LED Self-Test (Distinct visual confirmation for all 4 LEDs)
   const uint8_t leds[] = { LED1_BIT, LED2_BIT, LED3_BIT, LED4_BIT };
   for (int i = 0; i < 4; i++) {
     set_led(leds[i], 1);
-    UTIL_IdleMs(100);
+    UTIL_IdleMs(180);
     set_led(leds[i], 0);
+    UTIL_IdleMs(60);
   }
   for (int i = 0; i < 2; i++) {
     set_all_leds(1);
-    UTIL_IdleMs(60);
+    UTIL_IdleMs(120);
     set_all_leds(0);
-    UTIL_IdleMs(60);
+    UTIL_IdleMs(120);
   }
   set_led(LED_IDLE_BIT, 1); // LED1 (PIN_12) ON
 
@@ -560,12 +563,13 @@ int main(void) {
       process_sump_byte(c);
     }
 
-    // Idle heartbeat: LED1 stays lit, soft pulse every 2s
-    if (UTIL_GetTick() - led_flow_timer > 2000) {
+    // Idle heartbeat: LED1 stays lit, soft rotating pulse every 1.5s
+    if (UTIL_GetTick() - led_flow_timer > 1500) {
       led_flow_timer = UTIL_GetTick();
-      set_led(leds[(led_flow_idx++) % 4], 1);
-      UTIL_IdleMs(25);
-      set_all_leds(0);
+      uint8_t next_led = leds[1 + ((led_flow_idx++) % 3)]; // cycle LED2, LED3, LED4
+      set_led(next_led, 1);
+      UTIL_IdleMs(80);
+      set_led(next_led, 0);
       set_led(LED_IDLE_BIT, 1);
     }
   }
