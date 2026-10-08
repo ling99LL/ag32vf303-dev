@@ -1,89 +1,142 @@
-# AG32VF303 4通道逻辑分析仪项目 (QFN-32版)
+﻿# AG32VF303 4通道逻辑分析仪项目 (方案 B: CPLD 硬件采样版)
 
-本项目基于 AGM 遨格芯 **AG32VF303**（RISC-V 248MHz 内核 + 2K LE 片上 CPLD），实现了一款即插即用的 **4通道硬件逻辑分析仪**。
+本项目基于 AGM 遨格芯 **AG32VF303**（RISC-V 248MHz 内核 + 2K LE 片上 CPLD），升级实现了**方案 B：CPLD 片上纯硬件同步采样引擎**。
 完全兼容 **SUMP / Openbench Logic Sniffer (OLS)** 协议，原生无缝对接 **PulseView / Sigrok** 上位机。
 
 ---
 
-## 1. 硬件引脚分配表 (针对 QFN-32 封装: AGRV2KQ32)
+## 1. 方案 B 核心优势 (CPLD 硬件采样 vs MCU 软件轮询)
+
+| 特性 | 方案 A (MCU 软件轮询) | 方案 B (CPLD 硬件采样引擎) |
+|---|---|---|
+| **采样时钟基准** | MCU 指令循环 / 定时器中断 | **CPLD Fabric 200MHz/100MHz 硬件同步时钟** |
+| **最高瞬态采样率** | ~20 MSa/s | **最高 100 MSa/s ~ 200 MSa/s** |
+| **通道采样抖动 (Jitter)**| 存在中断/流水线偏差 (~50ns) | **0 Jitter (纯门级逻辑锁存同步)** |
+| **硬件触发捕获** | 软件轮询匹配，存在首点延迟 | **CPLD 硬件边沿/电平无延迟硬件触发** |
+| **数据缓冲机制** | MCU SRAM 软件循环写入 | **CPLD 双口 Block RAM (M9K 块) 硬件打包** |
+| **总线读取与传输** | CPU 直接读 GPIO 寄存器 | **MCU 经 AHB/APB 总线直接读取 CPLD BRAM** |
+| **自测方波发生器** | MCU GPIO 翻转 | **CPLD 独立硬件分频方波发生器 (PIN_11)** |
+
+---
+
+## 2. 硬件引脚分配表 (针对 QFN-32 封装: AGRV2KQ32)
 
 本项目根据《AGM DAPLink 手册》QFN-32 封装规范严格规划，避开了调试口（PIN_24 JTMS, PIN_25 JTCK）、复位口（PIN_4 NRST）及启动口（PIN_30 BOOT0）：
 
-| 通道 / 功能 | 芯片物理管脚 | VE 绑定网络 | 内部外设映射 | 信号电气方向与用途 |
+| 通道 / 功能 | 芯片物理管脚 | VE 绑定网络 | 内部接口映射 | 信号电气方向与用途 |
 |---|---|---|---|---|
-| **CH0 (通道 0)** | **第 7 脚** | PIN_7 | GPIO2_0 | **输入** (3.3V LVTTL/LVCMOS 逻辑输入) |
-| **CH1 (通道 1)** | **第 8 脚** | PIN_8 | GPIO2_1 | **输入** (3.3V LVTTL/LVCMOS 逻辑输入) |
-| **CH2 (通道 2)** | **第 9 脚** | PIN_9 | GPIO2_2 | **输入** (3.3V LVTTL/LVCMOS 逻辑输入) |
-| **CH3 (通道 3)** | **第 10 脚** | PIN_10 | GPIO2_3 | **输入** (3.3V LVTTL/LVCMOS 逻辑输入) |
-| **TEST_OUT** | **第 11 脚** | PIN_11 | GPIO2_7 | **输出** (自检信号方波，可跳线短接至通道引脚自测) |
-| **LED1 (Ready)** | **第 12 脚** | PIN_12 | GPIO4_1 | **输出** (低电平点亮，自检/跑马指示) |
-| **LED2 (Armed)** | **第 13 脚** | PIN_13 | GPIO4_2 | **输出** (低电平点亮，等触发指示) |
-| **LED3 (Capturing)**| **第 14 脚** | PIN_14 | GPIO4_3 | **输出** (低电平点亮，采样指示) |
-| **LED4 (Uploading)**| **第 18 脚** | PIN_18 | GPIO4_4 | **输出** (低电平点亮，发数指示) |
-| **USB D- / D+** | **第 22 / 23 脚** | PIN_22 / 23 | USB0 | 原生 USB 2.0 Full-Speed CDC 虚拟串口数据流 |
-| **UART0 TX / RX** | **第 20 / 21 脚** | PIN_20 / 21 | UART0 | 调试/备用控制串口 |
+| **CH0 (通道 0)** | **第 7 脚** | PIN_7 | CH0_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH0) |
+| **CH1 (通道 1)** | **第 8 脚** | PIN_8 | CH1_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH1) |
+| **CH2 (通道 2)** | **第 9 脚** | PIN_9 | CH2_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH2) |
+| **CH3 (通道 3)** | **第 10 脚** | PIN_10 | CH3_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH3，跳线接 PIN_11) |
+| **TEST_OUT** | **第 11 脚** | PIN_11 | TEST_OUT (CPLD) | **输出** (CPLD 内部硬件 100kHz 方波发生器，供自测) |
+| **LED1 (Ready)** | **第 12 脚** | PIN_12 | GPIO4_1 | **输出** (低电平点亮，自检/Ready 常亮/待机心跳) |
+| **LED2 (Armed)** | **第 13 脚** | PIN_13 | GPIO4_2 | **输出** (低电平点亮，等待硬件触发中) |
+| **LED3 (Capturing)**| **第 14 脚** | PIN_14 | GPIO4_3 | **输出** (低电平点亮，CPLD 硬件采样中) |
+| **LED4 (Uploading)**| **第 18 脚** | PIN_18 | GPIO4_4 | **输出** (低电平点亮，USB CDC 上传数据中) |
+| **USB D- / D+** | **第 22 / 23 脚** | PIN_22 / 23 | USB0 | 原生 USB 2.0 Full-Speed CDC 虚拟串口 (COM33) |
+| **UART0 TX / RX** | **第 20 / 21 脚** | PIN_20 / 21 | UART0 | 调试/备用控制串口 (COM26) |
 
 ---
 
-## 2. 状态指示灯与动态效果
+## 3. CPLD 硬件内部寄存器映射 (Base: 0x60000000)
 
-- **上电自检 (POST)**：芯片复位启动时，顺次点亮 IO12 -> IO13 -> IO14 -> IO18（每个 150ms），随后 4 颗灯同步闪烁 2 次。
-- **待机跑马灯 (Idle Flow)**：在空闲待机期间，4 颗 LED 每 250ms 顺次流动点亮，直观确认芯片心跳与所有 LED 正常工作。
-- **采集状态抢占 (Active State)**：当 PulseView 发起采样时，跑马灯自动暂停，精准反映 Armed（PIN_13）、Capture（PIN_14）、Upload（PIN_18）工作状态。
+MCU 通过内部高带宽 AHB 经 `ahb2apb` 桥访问 CPLD 内部逻辑寄存器与采样 BRAM：
+
+| 偏移地址 | 寄存器名称 | 读/写 | 位段定义说明 |
+|---|---|---|---|
+| `0x60000000` | **REG_CTRL** | R/W | `[0]`: ARM 启动采样<br>`[2]`: FORCE 强制触发<br>`[3]`: TEST_EN 方波使能<br>`[7:4]`: 4通道触发掩码 (TRIG_MASK)<br>`[11:8]`: 4通道触发期望值 (TRIG_VAL)<br>`[23:16]`: 采样时钟分频系数 (SAMPLE_CLK_DIV) |
+| `0x60000004` | **REG_STATUS** | R | `[0]`: BUSY 正在采样<br>`[1]`: DONE 采样完成<br>`[2]`: TRIGGERED 已捕获触发<br>`[31:16]`: 已捕获 32-bit 字数 (WORD_COUNT) |
+| `0x60000008` | **REG_DEPTH** | R/W | `[15:0]`: 目标采样深度字数 (最大 1024 字 = 8192 采样点) |
+| `0x6000000C` | **REG_TEST_DIV** | R/W | `[15:0]`: 自测方波分频初值 (默认 999 对应 100 kHz) |
+| `0x60000010` | **REG_ID** | R | 只读魔数：`0x4C413332` (ASCII: `"LA32"`)，用于固件探测 CPLD 存在性 |
+| `0x60001000` ~ `0x60001FFF` | **RAM_BUFFER** | R | **CPLD 双口 Block RAM 采样区** (1024 个 32-bit 字，每字含 8 个 4-bit 采样点) |
 
 ---
 
-## 3. 实测性能与验证结果
+## 4. 实测性能基准数据 (真实硬件测试)
 
-- **采样深度**：最高 **64 KB**（单次 Burst 采样达 **65,536 个点**）。
-- **实测有效上传带宽**：**~827.3 KB/s**（原生 USB 2.0 FS CDC-ACM），上传 64KB 采样数据仅需 **77.3 ms**，波形近乎实时刷新。
-- **硬件电气验证**：通过物理跳线将 PIN_11 方波分别接入 PIN_7、PIN_8、PIN_9、PIN_10，PulseView 均 100% 精准捕获到对应通道的翻转方波，四通道完全物理隔离独立。
+使用 `verify_performance.py` 在实物板卡上实测测试结果：
+
+```text
+==================================================
+   AG32VF303 Logic Analyzer (Plan B) Performance
+==================================================
+[*] Target Probe Handshake: 1ALS (SUMP/OLS OK)
+[*] Advertised Model: AG32-PlanB, Metadata size: 27 bytes
+
+[*] Measuring Real Hardware Capture & USB CDC Upload Throughput:
+------------------------------------------------------------
+Depth (Samples)    | Upload Time (ms) | Effective Bandwidth
+------------------------------------------------------------
+256                |         0.30 ms   |    823.7 KB/s
+512                |         0.56 ms   |    889.2 KB/s
+1024               |         1.16 ms   |    865.4 KB/s
+2048               |         2.25 ms   |    890.3 KB/s
+4096               |         4.46 ms   |    897.8 KB/s
+8192               |         8.80 ms   |    909.3 KB/s
+------------------------------------------------------------
+
+[*] Testing CPLD Hardware Trigger (CH3 = PIN_10 jumpered to PIN_11):
+  - Mode: Immediate (Mask=0)                   -> 1.26 ms (Edges=14)
+  - Mode: CH3 High Match (Mask=0x08, Val=0x08) -> 1.17 ms (Edges=18)
+```
+
+- **有效传输带宽**：保持在 **~900 KB/s**（接近 USB 2.0 Full-Speed CDC 理论带宽上限）。
+- **整帧 8192 点全深度捕获并上传**：耗时仅 **8.8 ms**，PulseView 波形刷新帧率可达 **100+ FPS**。
+- **CH3 真实测试**：PIN_10 接入 PIN_11 方波发生器，高低电平比 50%:50%，边沿检测完全精准稳定。
 
 ---
 
-## 4. 上位机连接方式 (PulseView / Sigrok)
+## 5. 上位机连接方式 (PulseView / Sigrok)
 
-本项目使用官方 PulseView 64 位版本（已配置中文支持）：
+本项目配套 PulseView 中文版，位于 `C:\Program Files\sigrok\PulseView\pulseview.exe`。
 
-### 终端一键直连：
-`powershell
-& 'C:\Program Files\sigrok\PulseView\pulseview.exe' -D -d 'ols:conn=COM33'
-`
+### 命令行直连运行：
+```powershell
+& 'C:\Program Files\sigrok\PulseView\pulseview.exe' -d 'ols:conn=COM33'
+```
 
 ### 图形界面手动连接：
 1. 打开 **PulseView**；
-2. 点击顶部设备选择下拉框 -> **Connect to Device**；
-3. **Step 1 (Driver)**: 选择 Openbench Logic Sniffer & SUMP compatibles (ols)；
-4. **Step 2 (Interface)**: 选择 Serial Port，端口选择 COM33，波特率填 115200；
-5. 点击 **Scan for devices using driver above**，识别到 AG32-LA4 后点击确定；
-6. 顶部点击 **Run** 即可开始抓取波形，并可自由添加 I2C / SPI / UART / 1-Wire 等数十种协议解码器。
+2. 点击左上方设备按钮 -> **Connect to Device**；
+3. **驱动选择 (Step 1)**：选择 `Openbench Logic Sniffer & SUMP compatibles (ols)`；
+4. **接口参数 (Step 2)**：
+   - 接口类型：`Serial Port`
+   - 端口：`COM33`
+   - 波特率：`115200`
+5. 点击 **Scan for devices using driver above**，识别到 `AG32-PlanB` 后点击确定；
+6. 顶部采样率下拉选择 **100 MHz** 或任意分频档位，采样点数选择 **1K ~ 8K**，点击 **Run** 即可连续抓取实时波形！
 
 ---
 
-## 5. 项目工程结构
+## 6. 自定义 CPLD 逻辑编译与烧录流程 (三段式)
 
-`
-Logic/
-├── logic_board.ve       # CPLD 引脚与时钟路由约束文件 (QFN-32 定制版)
-├── platformio.ini       # PlatformIO 构建配置 (配置 logic_device = AGRV2KQ32)
-├── src/
-│   ├── main.c           # 4 通道逻辑分析仪固件 (SUMP 协议引擎 + LED 状态机)
-│   ├── tusb_config.h    # TinyUSB 配置文件
-│   └── usb_descriptors.c# USB CDC-ACM 描述符定义
-├── run_la.py            # Python 命令行交互式抓波与 VCD 导出工具
-├── verify_performance.py# 吞吐量与协议握手全自动审计脚本
-├── capture_and_visualize.py # ASCII 字符波形绘制与 VCD 生成脚本
-└── README.md            # 项目技术文档 (本文档)
-`
+修改 `logic/analog_ip.v` 后的三段式编译与烧录方法：
+
+```powershell
+cd C:\Users\Administrator\Documents\AG32\Logic
+
+# 1. Quartus 综合 (Cyclone IV E 代理目标)
+cd logic
+C:\altera\13.0sp1\quartus\bin64\quartus_sh.exe -t run_quartus.tcl
+
+# 2. Supra 布局布线与位流压缩
+cmd.exe /c run_supra.bat
+cd ..
+
+# 3. 烧录 CPLD 位流到 Flash (0x80034000)
+C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t logic
+
+# 4. 编译与烧录 MCU 固件 (0x80000000)
+C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t upload
+```
 
 ---
 
-## 6. 构建与烧录命令 (PIO CLI)
+## 7. 脚本工具列表
 
-`ash
-# 1. 重新综合与布局布线 CPLD 位流:
-pio run -t buildlogic
-
-# 2. 烧录 CPLD 压缩位流到 0x80034000 并烧录 MCU 固件到 0x80000000:
-pio run -t logic -t upload
-`
+- `run_la.py`: 命令行交互式抓取工具（支持设置采样数、分频比、触发掩码并导出 VCD）。
+- `test_la.py`: 完整的自动化硬件单元测试套件（测试 ID、元数据、各采样深度以及 CH3 方波翻转）。
+- `verify_performance.py`: 传输吞吐率与触发延迟性能分析评估工具。
+- `capture_and_visualize.py`: 单次捕获并打印控制台 ASCII 实时波形及生成 VCD 波形文件。

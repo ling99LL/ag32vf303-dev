@@ -1,0 +1,12 @@
+.pio/
+*.vo
+*.sdo
+*.bin
+*.vcd
+db/
+incremental_db/
+quartus_logs/
+simulation/
+alta_db/
+alta_logs/
+*.cfg

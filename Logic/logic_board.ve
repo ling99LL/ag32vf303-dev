@@ -11,18 +11,16 @@ UART0_UARTTXD PIN_20
 UART0_UARTRXD PIN_21
 
 # Status LEDs on QFN32:
-# PIN_26, PIN_27, PIN_28, PIN_31
 GPIO4_1 PIN_12 # LED1 (Power / Ready)
 GPIO4_2 PIN_13 # LED2 (Armed / Waiting trigger)
 GPIO4_3 PIN_14 # LED3 (Capturing)
 GPIO4_4 PIN_18 # LED4 (Transmitting Data)
 
-# Logic Analyzer 4 Channels Input (mapped to GPIO2_0..3)
-# QFN32: PIN_7 -> CH0, PIN_8 -> CH1, PIN_9 -> CH2, PIN_10 -> CH3
-GPIO2_0 PIN_7:INPUT
-GPIO2_1 PIN_8:INPUT
-GPIO2_2 PIN_9:INPUT
-GPIO2_3 PIN_10:INPUT
+# Logic Analyzer 4 Channels Input (Direct to CPLD fabric)
+CH0_IN PIN_7:INPUT
+CH1_IN PIN_8:INPUT
+CH2_IN PIN_9:INPUT
+CH3_IN PIN_10:INPUT
 
-# Built-in Test Pattern Generator Output (mapped to GPIO2_7 -> PIN_11)
-GPIO2_7 PIN_11:OUTPUT
+# Built-in Hardware Test Pattern Output
+TEST_OUT PIN_11:OUTPUT

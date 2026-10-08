@@ -1,0 +1,13 @@
+[GuiMigrateQuartusPage]
+verilogFiles=logic_board.v, analog_ip.v
+
+[GuiMigrateSetupPage]
+design=logic_board
+device=AGRV2KQ32
+flowInline=force
+
+[GuiMigrateRunPage]
+fitting=1
+fitter=5
+effort=2
+skew=2
