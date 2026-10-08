@@ -242,8 +242,9 @@ static void execute_capture(void) {
     }
 
     // ARM CPLD Sampler (bit 0=ARM, bit 3=TEST_EN, bits [7:4]=mask, bits [11:8]=val, bit 12=edge_mode, bits [23:16]=clk_div)
-    // If mask is set and edge mode requested, or default edge detection on masked channel
-    uint32_t edge_bit = (mask != 0) ? (1 << 12) : 0;
+    // In SUMP/OLS protocol, 0xC0/0xC1 defines stage 0 mask & value for hardware level match.
+    // Level match provides instantaneous hardware triggering on incoming digital levels/waveforms.
+    uint32_t edge_bit = (trigger_mask & 0x10) ? (1 << 12) : 0; // bit 4 set in mask selects edge mode
     uint32_t ctrl_val = (1 << 0) | (1 << 3) | ((uint32_t)mask << 4) | ((uint32_t)val << 8) | edge_bit | (clk_div << 16);
     CPLD_REG_CTRL = ctrl_val;
 
