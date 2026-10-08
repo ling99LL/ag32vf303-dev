@@ -92,6 +92,7 @@ static uint32_t trigger_mask   = 0;
 static uint32_t trigger_val    = 0;
 static uint32_t sample_divider = 0;
 static uint8_t  active_changroups = 1;
+static bool     rle_enabled = false;
 
 // USB Clock Trimming (from official TinyUSB CDC example)
 static FCB_IO_TypeDef io_cfg;
@@ -408,6 +409,7 @@ static void process_sump_byte(uint8_t b) {
         }
       } else if (op == SUMP_FLAGS) {
         uint16_t flags = (cmd_buf[2] << 8) | cmd_buf[1];
+        rle_enabled = ((flags & 0x0100) != 0);
         if ((flags & 0x3C) != 0) {
           uint8_t groups = 0;
           for (uint8_t m = 0x20; m > 0x02; m >>= 1) {
