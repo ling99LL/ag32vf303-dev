@@ -92,6 +92,10 @@ module analog_ip (
   reg [2:0]  sub_idx = 3'd0;
   reg [31:0] shift_buf = 32'd0;
   reg [15:0] word_idx = 16'd0;
+  reg [9:0]  trig_pos = 10'd0;
+  reg [15:0] post_trig_words = 16'd1024;
+  reg [15:0] post_cnt = 16'd0;
+  reg        post_sampling = 1'b0;
 
   // Dual-Port Block RAM: 1024 words x 32-bit = 32 Kbits
   reg [31:0] ram [0:1023];
@@ -136,12 +140,14 @@ module analog_ip (
       ram_wr_en <= 1'b0;
 
       if (!sampler_arm) begin
-        busy      <= 1'b0;
-        done      <= 1'b0;
-        triggered <= 1'b0;
-        div_cnt   <= 8'd0;
-        sub_idx   <= 3'd0;
-        word_idx  <= 16'd0;
+        busy          <= 1'b0;
+        done          <= 1'b0;
+        triggered     <= 1'b0;
+        post_sampling <= 1'b0;
+        post_cnt      <= 16'd0;
+        div_cnt       <= 8'd0;
+        sub_idx       <= 3'd0;
+        word_idx      <= 16'd0;
       end else if (busy) begin
         if (div_cnt < sample_clk_div) begin
           div_cnt <= div_cnt + 8'd1;
@@ -154,22 +160,36 @@ module analog_ip (
             ram_wr_data <= {ch_raw, shift_buf[31:4]};
             ram_wr_addr <= word_idx[9:0];
             ram_wr_en   <= 1'b1;
-            word_idx    <= word_idx + 16'd1;
 
             if (word_idx >= sample_depth_words - 16'd1) begin
-              busy <= 1'b0;
-              done <= 1'b1;
+              word_idx <= 16'd0;
+            end else begin
+              word_idx <= word_idx + 16'd1;
+            end
+
+            if (!triggered && (sampler_force || trig_mask == 4'd0 || trig_match)) begin
+              triggered     <= 1'b1;
+              trig_pos      <= word_idx[9:0];
+              post_sampling <= 1'b1;
+              post_cnt      <= 16'd1;
+            end else if (post_sampling) begin
+              if (post_cnt >= post_trig_words) begin
+                busy          <= 1'b0;
+                done          <= 1'b1;
+                post_sampling <= 1'b0;
+              end else begin
+                post_cnt <= post_cnt + 16'd1;
+              end
             end
           end
         end
       end else if (!done) begin
-        if (sampler_force || trig_mask == 4'd0 || trig_match) begin
-          triggered <= 1'b1;
-          busy      <= 1'b1;
-          div_cnt   <= 8'd0;
-          sub_idx   <= 3'd0;
-          word_idx  <= 16'd0;
-        end
+        busy          <= 1'b1;
+        div_cnt       <= 8'd0;
+        sub_idx       <= 3'd0;
+        word_idx      <= 16'd0;
+        post_sampling <= 1'b0;
+        post_cnt      <= 16'd0;
       end
     end
   end
@@ -249,6 +269,12 @@ module analog_ip (
         16'h000C: begin // 0x6000000C: REG_TEST_DIV
           test_div_limit <= apb_pwdata[15:0];
         end
+        16'h0018: begin // 0x60000018: REG_POST_WORDS
+          if (apb_pwdata[15:0] > 16'd0 && apb_pwdata[15:0] <= sample_depth_words)
+            post_trig_words <= apb_pwdata[15:0];
+          else
+            post_trig_words <= sample_depth_words;
+        end
         default: ;
       endcase
     end
@@ -269,7 +295,9 @@ module analog_ip (
         16'h0004: apb_prdata = {word_idx, 13'h0, triggered, done, busy};
         16'h0008: apb_prdata = {16'h0, sample_depth_words};
         16'h000C: apb_prdata = {16'h0, test_div_limit};
-        16'h0010: apb_prdata = 32'h4C413332; // "LA32" magic ID
+        16'h0010: apb_prdata = 32'h4C413332;
+        16'h0014: apb_prdata = {6'h0, trig_pos, 16'h0};
+        16'h0018: apb_prdata = {16'h0, post_trig_words}; // "LA32" magic ID
         default:  apb_prdata = 32'h0;
       endcase
     end

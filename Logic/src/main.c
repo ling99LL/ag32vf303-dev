@@ -40,6 +40,8 @@
 #define CPLD_REG_DEPTH     (*(volatile uint32_t *)0x60000008)
 #define CPLD_REG_TEST_DIV  (*(volatile uint32_t *)0x6000000C)
 #define CPLD_REG_ID        (*(volatile uint32_t *)0x60000010)
+#define CPLD_REG_TRIG_POS  (*(volatile uint32_t *)0x60000014)
+#define CPLD_REG_POST_WORDS (*(volatile uint32_t *)0x60000018)
 #define CPLD_RAM_BASE      ((volatile uint32_t *)0x60001000)
 
 #define BUFFER_SIZE (64 * 1024)
@@ -209,6 +211,13 @@ static void execute_capture(void) {
     if (words_needed > 1024) words_needed = 1024;
     CPLD_REG_DEPTH = words_needed;
 
+    // Pre-trigger vs Post-trigger calculation:
+    // If sample_delay is configured (post-trigger samples), map to post_trig_words
+    uint32_t post_words = (sample_delay > 0) ? ((sample_delay + 7) / 8) : words_needed;
+    if (post_words > words_needed) post_words = words_needed;
+    if (post_words == 0) post_words = words_needed;
+    CPLD_REG_POST_WORDS = post_words;
+
     uint8_t mask = (uint8_t)(trigger_mask & 0x0F);
     uint8_t val  = (uint8_t)(trigger_val & 0x0F);
 
@@ -280,11 +289,16 @@ static void execute_capture(void) {
     set_led(LED_CAP_BIT, 0);
     set_led(LED_TX_BIT, 1); // PIN_18 ON
 
-    // Direct reverse unpacking from BRAM (Zero-Copy inversion)
-    // CPLD stored samples: word 0 contains samples 0..7 (sample 0 at bits 3:0).
-    // SUMP expects reverse chronological order: latest sample first!
+    // Circular BRAM alignment:
+    // Read the trigger word position recorded by CPLD
+    uint32_t trig_word = (CPLD_REG_TRIG_POS >> 16) & 0x3FF;
+    // Calculate newest written word index in the circular buffer
+    uint32_t newest_word = (trig_word + post_words) % words_needed;
+
+    // Unpack in reverse chronological order from newest_word down
     int32_t target_idx = 0;
-    for (int32_t w = (int32_t)words_needed - 1; w >= 0; w--) {
+    for (uint32_t step = 0; step < words_needed; step++) {
+      uint32_t w = (newest_word + words_needed - 1 - step) % words_needed;
       uint32_t word = CPLD_RAM_BASE[w];
       for (int nibble = 7; nibble >= 0; nibble--) {
         if (target_idx < (int32_t)count) {
