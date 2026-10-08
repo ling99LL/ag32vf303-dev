@@ -242,6 +242,7 @@ module analog_ip (
           test_en        <= apb_pwdata[3];
           trig_mask      <= apb_pwdata[7:4];
           trig_val       <= apb_pwdata[11:8];
+          trig_edge_en   <= apb_pwdata[12];
           sample_clk_div <= apb_pwdata[23:16];
         end
         16'h0008: begin // 0x60000008: REG_DEPTH
@@ -275,7 +276,7 @@ module analog_ip (
       apb_prdata = ram_rd_port;
     end else begin
       case (apb_paddr[15:0])
-        16'h0000: apb_prdata = {8'h0, sample_clk_div, 4'h0, trig_val, trig_mask, 1'b0, test_en, sampler_force, 1'b0, sampler_arm};
+        16'h0000: apb_prdata = {8'h0, sample_clk_div, 3'h0, trig_edge_en, trig_val, trig_mask, 1'b0, test_en, sampler_force, 1'b0, sampler_arm};
         16'h0004: apb_prdata = {word_idx, 13'h0, triggered, done, busy};
         16'h0008: apb_prdata = {16'h0, sample_depth_words};
         16'h000C: apb_prdata = {16'h0, test_div_limit};
