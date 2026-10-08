@@ -301,9 +301,21 @@ static void execute_capture(void) {
     int32_t target_idx = 0;
     for (int32_t w = (int32_t)words_needed - 1; w >= 0; w--) {
       uint32_t word = CPLD_RAM_BASE[w];
-      for (int nibble = 7; nibble >= 0; nibble--) {
-        if (target_idx < (int32_t)count) {
-          sample_buffer[target_idx++] = (uint8_t)((word >> (nibble * 4)) & 0x0F);
+      if ((target_idx + 8) <= (int32_t)count) {
+        sample_buffer[target_idx + 0] = (uint8_t)((word >> 28) & 0x0F);
+        sample_buffer[target_idx + 1] = (uint8_t)((word >> 24) & 0x0F);
+        sample_buffer[target_idx + 2] = (uint8_t)((word >> 20) & 0x0F);
+        sample_buffer[target_idx + 3] = (uint8_t)((word >> 16) & 0x0F);
+        sample_buffer[target_idx + 4] = (uint8_t)((word >> 12) & 0x0F);
+        sample_buffer[target_idx + 5] = (uint8_t)((word >> 8)  & 0x0F);
+        sample_buffer[target_idx + 6] = (uint8_t)((word >> 4)  & 0x0F);
+        sample_buffer[target_idx + 7] = (uint8_t)(word         & 0x0F);
+        target_idx += 8;
+      } else {
+        for (int nibble = 7; nibble >= 0; nibble--) {
+          if (target_idx < (int32_t)count) {
+            sample_buffer[target_idx++] = (uint8_t)((word >> (nibble * 4)) & 0x0F);
+          }
         }
       }
     }
