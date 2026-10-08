@@ -109,22 +109,29 @@ module analog_ip (
     end
   end
 
-  // Edge & Level Trigger Engine
-  reg [3:0] ch_prev = 4'd0;
+  // 2-Stage Synchronizer & Edge/Level Trigger Pipeline for STA Timing Convergence
+  reg [3:0] ch_sync0 = 4'd0;
+  reg [3:0] ch_sync1 = 4'd0;
+  reg [3:0] ch_prev  = 4'd0;
+
   always @(posedge sys_clock) begin
-    ch_prev <= ch_raw;
+    ch_sync0 <= ch_raw;
+    ch_sync1 <= ch_sync0;
+    ch_prev  <= ch_sync1;
   end
 
-  // Level match: (ch_raw & mask) == (val & mask)
+  wire [3:0] ch_current = ch_sync1;
+
+  // Level match: (ch_current & mask) == (val & mask)
   // Edge match (when bit 12 of REG_CTRL is set):
-  //   if trig_val bit is 1 -> Rising Edge: (ch_prev==0 && ch_raw==1)
-  //   if trig_val bit is 0 -> Falling Edge: (ch_prev==1 && ch_raw==0)
-  wire [3:0] ch_rising  = (~ch_prev) & ch_raw;
-  wire [3:0] ch_falling = ch_prev & (~ch_raw);
+  //   if trig_val bit is 1 -> Rising Edge: (ch_prev==0 && ch_current==1)
+  //   if trig_val bit is 0 -> Falling Edge: (ch_prev==1 && ch_current==0)
+  wire [3:0] ch_rising  = (~ch_prev) & ch_current;
+  wire [3:0] ch_falling = ch_prev & (~ch_current);
   wire [3:0] ch_edge    = (ch_rising & trig_val) | (ch_falling & ~trig_val);
   
   wire trig_edge_mode = trig_edge_en;
-  wire trig_match = trig_edge_mode ? (| (ch_edge & trig_mask)) : (((ch_raw & trig_mask) == (trig_val & trig_mask)));
+  wire trig_match = trig_edge_mode ? (| (ch_edge & trig_mask)) : (((ch_current & trig_mask) == (trig_val & trig_mask)));
 
   always @(posedge sys_clock or negedge resetn) begin
     if (!resetn) begin
@@ -151,11 +158,11 @@ module analog_ip (
           div_cnt <= div_cnt + 8'd1;
         end else begin
           div_cnt <= 8'd0;
-          shift_buf <= {ch_raw, shift_buf[31:4]};
+          shift_buf <= {ch_current, shift_buf[31:4]};
           sub_idx   <= sub_idx + 3'd1;
 
           if (sub_idx == 3'd7) begin
-            ram_wr_data <= {ch_raw, shift_buf[31:4]};
+            ram_wr_data <= {ch_current, shift_buf[31:4]};
             ram_wr_addr <= word_idx[9:0];
             ram_wr_en   <= 1'b1;
             word_idx    <= word_idx + 16'd1;
