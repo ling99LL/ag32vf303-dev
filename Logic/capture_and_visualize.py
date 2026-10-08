@@ -1,4 +1,4 @@
-﻿import serial
+import serial
 import time
 import sys
 
@@ -69,7 +69,7 @@ def print_ascii_waveform(samples, length=80):
         line = f"{ch_names[ch]:14s}: "
         for s in samples[:length]:
             bit = (s >> ch) & 1
-            line += "▔" if bit == 1 else " "
+            line += "-" if bit == 1 else "_"
         print(line)
     print(" " * 16 + "0" + " " * (length - 3) + str(length))
 
