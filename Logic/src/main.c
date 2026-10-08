@@ -148,9 +148,15 @@ static inline void toggle_test_out(void) {
 static void comm_send_byte(uint8_t c) {
   if (tud_cdc_connected()) {
     tud_cdc_write(&c, 1);
+    // Non-blocking mirror to UART if FIFO has room, preventing 115200 baud bottleneck on USB
+    if (!UART_IsTxFifoFull(UART0)) {
+      UART_TransmitData(UART0, c);
+    }
+  } else {
+    // USB not active: reliable blocking send over UART0
+    while (UART_IsTxFifoFull(UART0)) {}
+    UART_TransmitData(UART0, c);
   }
-  while (UART_IsTxFifoFull(UART0)) {}
-  UART_TransmitData(UART0, c);
 }
 
 static void comm_flush(void) {
