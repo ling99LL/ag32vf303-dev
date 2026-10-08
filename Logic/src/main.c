@@ -215,6 +215,17 @@ static void execute_capture(void) {
     uint32_t eff_div = sample_divider & 0x7FFFFFFF;
     uint32_t clk_div = (eff_div > 0) ? (eff_div & 0xFF) : 0;
 
+    // Adaptively tune PIN_11 test wave generator frequency for optimal scope display:
+    if (clk_div == 0) {
+      CPLD_REG_TEST_DIV = 99;    // 1 MHz square wave (200MHz / 200)
+    } else if (clk_div == 1) {
+      CPLD_REG_TEST_DIV = 199;   // 500 kHz square wave
+    } else if (clk_div <= 9) {
+      CPLD_REG_TEST_DIV = 999;   // 100 kHz square wave
+    } else {
+      CPLD_REG_TEST_DIV = 4999;  // 20 kHz square wave for low-speed captures
+    }
+
     // ARM CPLD Sampler (bit 0=ARM, bit 3=TEST_EN, bits [7:4]=mask, bits [11:8]=val, bit 12=edge_mode, bits [23:16]=clk_div)
     // If mask is set and edge mode requested, or default edge detection on masked channel
     uint32_t edge_bit = (mask != 0) ? (1 << 12) : 0;
