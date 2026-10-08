@@ -156,3 +156,9 @@ C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t
 4. **长时压测与断连恢复**：
    - USB 传输循环带有 500 ms 逃逸守卫，上位机意外断开或关闭时，MCU 自行复位状态机并恢复待机心跳，无需人工按键复位。
    - 经实测通过 50 次连续密集捕获压测，成功率 100%，USB CDC 有效吞吐率达到 **~925 KB/s**。
+5. **CPLD 硬件边沿触发引擎 (Hardware Edge-Trigger)**：
+   - 在 logic/analog_ip.v 中引入专用上一周期采样快照寄存器 ch_prev，支持纯门级无毛刺上升沿 (ch_rising) 与下降沿 (ch_falling) 极速边沿捕获，响应延迟为 0 周期。
+   - REG_CTRL 扩展第 12 位 	rig_edge_en，无缝衔接 PulseView 多阶段边沿与电平复合触发模式。
+6. **实时间隔行程压缩 (SUMP RLE Compression)**：
+   - 固件支持 SUMP RLE (Run-Length Encoding) 协议规范（Flags  x0100）。
+   - 对低频信号或方波平台进行实时流式游程编码，经实测 100kHz 测试方波压缩比达到 **10.78倍**（1024 字节压缩至 95 字节），突破 USB CDC 带宽与 BRAM 深度瓶颈，支持 PulseView 超长周期连续抓取。
