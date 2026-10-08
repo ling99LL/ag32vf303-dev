@@ -194,7 +194,7 @@ static void execute_capture(void) {
   if (count > 8192) count = 8192; // Max CPLD BRAM capacity
 
   set_all_leds(0);
-  set_led(LED_ARM_BIT, 1); // PIN_13 ON
+  set_led(LED_ARM_BIT, 1); // PIN_13 ON (Waiting Trigger)
 
   // Check CPLD Hardware Sampler presence
   bool cpld_ok = (CPLD_REG_ID == 0x4C413332);
@@ -210,66 +210,92 @@ static void execute_capture(void) {
     uint8_t mask = (uint8_t)(trigger_mask & 0x0F);
     uint8_t val  = (uint8_t)(trigger_val & 0x0F);
 
-    // Map SUMP divider to CPLD clock divider
     uint32_t eff_div = sample_divider & 0x7FFFFFFF;
     uint32_t clk_div = (eff_div > 0) ? (eff_div & 0xFF) : 0;
 
-    // ARM the CPLD Sampler (bit 0=ARM, bit 3=TEST_EN, bits [7:4]=mask, bits [11:8]=val, bits [23:16]=clk_div)
+    // ARM CPLD Sampler
     uint32_t ctrl_val = (1 << 0) | (1 << 3) | ((uint32_t)mask << 4) | ((uint32_t)val << 8) | (clk_div << 16);
     CPLD_REG_CTRL = ctrl_val;
 
-    set_led(LED_ARM_BIT, 0);
-    set_led(LED_CAP_BIT, 1); // PIN_14 ON
+    // Wait for trigger and capture with continuous USB servicing and abort checking
+    uint32_t wait_start = UTIL_GetTick();
+    bool aborted = false;
 
-    // Wait for capture complete (bit 1 of REG_STATUS = DONE)
-    uint32_t timeout = 5000000;
-    while (timeout--) {
+    while (1) {
+      tud_task();
       uint32_t stat = CPLD_REG_STATUS;
+
+      if (stat & (1 << 2)) { // TRIGGERED
+        set_led(LED_ARM_BIT, 0);
+        set_led(LED_CAP_BIT, 1); // PIN_14 ON
+      }
+
       if (stat & (1 << 1)) { // DONE
+        break;
+      }
+
+      // Check if user aborts from PulseView
+      if (tud_cdc_available()) {
+        uint8_t peek_b;
+        tud_cdc_read(&peek_b, 1);
+        if (peek_b == SUMP_RESET) {
+          CPLD_REG_CTRL = (1 << 3); // De-arm
+          aborted = true;
+          break;
+        }
+      }
+
+      // Unattended trigger timeout guard (1500 ms)
+      if (UTIL_GetTick() - wait_start > 1500) {
+        // Force complete capture so communication never deadlocks
+        CPLD_REG_CTRL = ctrl_val | (1 << 2); // Force trigger
+        set_led(LED_ARM_BIT, 0);
+        set_led(LED_CAP_BIT, 1);
+        UTIL_IdleMs(2);
         break;
       }
     }
 
-    // If trigger timeout, force complete
-    if (timeout == 0) {
-      CPLD_REG_CTRL = ctrl_val | (1 << 2); // Force trigger
-      UTIL_IdleMs(5);
+    if (aborted) {
+      set_all_leds(0);
+      set_led(LED_IDLE_BIT, 1);
+      return;
     }
 
     set_led(LED_CAP_BIT, 0);
     set_led(LED_TX_BIT, 1); // PIN_18 ON
 
-    // Read 32-bit sample words from CPLD BRAM and unpack 4-bit nibbles
-    uint32_t s_idx = 0;
-    for (uint32_t w = 0; w < words_needed && s_idx < count; w++) {
+    // Direct reverse unpacking from BRAM (Zero-Copy inversion)
+    // CPLD stored samples: word 0 contains samples 0..7 (sample 0 at bits 3:0).
+    // SUMP expects reverse chronological order: latest sample first!
+    int32_t target_idx = 0;
+    for (int32_t w = (int32_t)words_needed - 1; w >= 0; w--) {
       uint32_t word = CPLD_RAM_BASE[w];
-      for (int nibble = 0; nibble < 8 && s_idx < count; nibble++) {
-        sample_buffer[s_idx++] = (uint8_t)((word >> (nibble * 4)) & 0x0F);
+      for (int nibble = 7; nibble >= 0; nibble--) {
+        if (target_idx < (int32_t)count) {
+          sample_buffer[target_idx++] = (uint8_t)((word >> (nibble * 4)) & 0x0F);
+        }
       }
     }
 
-    // Reset CPLD sampler ARM
-    CPLD_REG_CTRL = (1 << 3); // keep test generator enabled
+    // Keep test generator running
+    CPLD_REG_CTRL = (1 << 3);
   } else {
-    // Fallback: Software GPIO Polling
+    // Software Fallback Polling
     set_led(LED_ARM_BIT, 0);
     set_led(LED_CAP_BIT, 1);
     for (uint32_t i = 0; i < count; i++) {
-      sample_buffer[i] = GPIO_GetValue(GPIO2, 0x0F);
+      sample_buffer[count - 1 - i] = GPIO_GetValue(GPIO2, 0x0F);
     }
     set_led(LED_CAP_BIT, 0);
     set_led(LED_TX_BIT, 1);
   }
 
-  // Reverse buffer in-place (SUMP protocol expects reverse chronological order)
-  for (uint32_t i = 0, j = count - 1; i < j; i++, j--) {
-    uint8_t tmp = sample_buffer[i];
-    sample_buffer[i] = sample_buffer[j];
-    sample_buffer[j] = tmp;
-  }
-
   uint8_t groups = active_changroups;
   if (groups == 0 || groups > 4) groups = 1;
+
+  // Stream data over USB CDC with 64-byte packet optimization and timeout guard
+  uint32_t tx_start = UTIL_GetTick();
 
   if (groups == 1) {
     uint32_t sent = 0;
@@ -283,12 +309,17 @@ static void execute_capture(void) {
           uint32_t n = tud_cdc_write(&sample_buffer[sent], to_send);
           sent += n;
           tud_cdc_write_flush();
+          tx_start = UTIL_GetTick(); // Refresh timeout
         }
       } else {
         while (sent < count) {
           while (UART_IsTxFifoFull(UART0)) {}
           UART_TransmitData(UART0, sample_buffer[sent++]);
         }
+      }
+      // Watchdog escape if USB disconnected during send
+      if (UTIL_GetTick() - tx_start > 500) {
+        break;
       }
     }
   } else {
@@ -308,11 +339,14 @@ static void execute_capture(void) {
       }
 
       if (tud_cdc_connected()) {
+        uint32_t wait_avail = UTIL_GetTick();
         while (tud_cdc_write_available() < pkt_len) {
           tud_task();
+          if (UTIL_GetTick() - wait_avail > 200) break;
         }
         tud_cdc_write(pkt, pkt_len);
         tud_cdc_write_flush();
+        tx_start = UTIL_GetTick();
       } else {
         for (uint32_t b = 0; b < pkt_len; b++) {
           while (UART_IsTxFifoFull(UART0)) {}
@@ -320,6 +354,7 @@ static void execute_capture(void) {
         }
       }
       sent_samples += batch;
+      if (UTIL_GetTick() - tx_start > 500) break;
     }
   }
   comm_flush();
@@ -334,7 +369,7 @@ static void process_sump_byte(uint8_t b) {
 
   if (cmd_state == 0) {
     if (b == SUMP_RESET) {
-      set_led(ALL_LEDS, 0);
+      set_all_leds(0);
       set_led(LED_IDLE_BIT, 1);
     } else if (b == SUMP_ID) {
       comm_send_byte('1');
@@ -407,22 +442,20 @@ int main(void) {
   const uint8_t leds[] = { LED1_BIT, LED2_BIT, LED3_BIT, LED4_BIT };
   for (int i = 0; i < 4; i++) {
     set_led(leds[i], 1);
-    UTIL_IdleMs(120);
+    UTIL_IdleMs(100);
     set_led(leds[i], 0);
   }
   for (int i = 0; i < 2; i++) {
     set_all_leds(1);
-    UTIL_IdleMs(80);
+    UTIL_IdleMs(60);
     set_all_leds(0);
-    UTIL_IdleMs(80);
+    UTIL_IdleMs(60);
   }
   set_led(LED_IDLE_BIT, 1); // LED1 (PIN_12) ON
 
   printf("\n=== AG32 Plan B Logic Analyzer (CPLD Sampler) Ready ===\n");
   if (CPLD_REG_ID == 0x4C413332) {
-    printf("[CPLD] Hardware Sampler Detected: ID = 0x%08X (LA32)\n", (unsigned int)CPLD_REG_ID);
-  } else {
-    printf("[CPLD] Note: Hardware Sampler ID readback: 0x%08X\n", (unsigned int)CPLD_REG_ID);
+    printf("[CPLD] Hardware Sampler Active: ID = 0x%08X (LA32)\n", (unsigned int)CPLD_REG_ID);
   }
 
   uint32_t led_flow_timer = UTIL_GetTick();
@@ -444,11 +477,11 @@ int main(void) {
       process_sump_byte(c);
     }
 
-    // Idle status heartbeat: LED1 stays lit, brief flow pulse every 2s
+    // Idle heartbeat: LED1 stays lit, soft pulse every 2s
     if (UTIL_GetTick() - led_flow_timer > 2000) {
       led_flow_timer = UTIL_GetTick();
       set_led(leds[(led_flow_idx++) % 4], 1);
-      UTIL_IdleMs(30);
+      UTIL_IdleMs(25);
       set_all_leds(0);
       set_led(LED_IDLE_BIT, 1);
     }
