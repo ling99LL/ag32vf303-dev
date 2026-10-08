@@ -10,3 +10,9 @@ simulation/
 alta_db/
 alta_logs/
 *.cfg
+logic/logic_board_routed.v
+logic/logic_log.txt
+*.v
+!logic/analog_ip.v
+!logic/ahb2apb.v
+!logic/example_board.v

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" style="background:#1e1e2e; font-family:Consolas, monospace;">
+<text x="480" y="25" fill="#cdd6f4" font-size="16" text-anchor="middle" font-weight="bold">AG32 Logic Analyzer (Plan B: CPLD Hardware Sampler) Live Capture @ 10 MSa/s</text>
+<line x1="180.0" y1="40" x2="180.0" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="180.0" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">0.0us</text>
+<line x1="242.18487394957984" y1="40" x2="242.18487394957984" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="242.18487394957984" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">1.0us</text>
+<line x1="304.3697478991597" y1="40" x2="304.3697478991597" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="304.3697478991597" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">2.0us</text>
+<line x1="366.5546218487395" y1="40" x2="366.5546218487395" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="366.5546218487395" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">3.0us</text>
+<line x1="428.73949579831935" y1="40" x2="428.73949579831935" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="428.73949579831935" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">4.0us</text>
+<line x1="490.92436974789916" y1="40" x2="490.92436974789916" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="490.92436974789916" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">5.0us</text>
+<line x1="553.109243697479" y1="40" x2="553.109243697479" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="553.109243697479" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">6.0us</text>
+<line x1="615.2941176470588" y1="40" x2="615.2941176470588" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="615.2941176470588" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">7.0us</text>
+<line x1="677.4789915966387" y1="40" x2="677.4789915966387" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="677.4789915966387" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">8.0us</text>
+<line x1="739.6638655462185" y1="40" x2="739.6638655462185" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="739.6638655462185" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">9.0us</text>
+<line x1="801.8487394957983" y1="40" x2="801.8487394957983" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="801.8487394957983" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">10.0us</text>
+<line x1="864.0336134453781" y1="40" x2="864.0336134453781" y2="320" stroke="#313244" stroke-dasharray="3,3" />
+<text x="864.0336134453781" y="335" fill="#a6adc8" font-size="10" text-anchor="middle">11.0us</text>
+<text x="165" y="75" fill="#00d2d3" font-size="13" text-anchor="end" font-weight="bold">CH0 (PIN 7)</text>
+<line x1="180" y1="85" x2="920" y2="85" stroke="#45475a" />
+<path d="M 180.0 85.0 H 186.2 H 192.4 H 198.7 H 204.9 H 211.1 H 217.3 H 223.5 H 229.7 H 236.0 H 242.2 H 248.4 H 254.6 H 260.8 H 267.1 H 273.3 H 279.5 H 285.7 H 291.9 H 298.2 H 304.4 H 310.6 H 316.8 H 323.0 H 329.2 H 335.5 H 341.7 H 347.9 H 354.1 H 360.3 H 366.6 H 372.8 H 379.0 H 385.2 H 391.4 H 397.6 H 403.9 H 410.1 H 416.3 H 422.5 H 428.7 H 435.0 H 441.2 H 447.4 H 453.6 H 459.8 H 466.1 H 472.3 H 478.5 H 484.7 H 490.9 H 497.1 H 503.4 H 509.6 H 515.8 H 522.0 H 528.2 H 534.5 H 540.7 H 546.9 H 553.1 H 559.3 H 565.5 H 571.8 H 578.0 H 584.2 H 590.4 H 596.6 H 602.9 H 609.1 H 615.3 H 621.5 H 627.7 H 633.9 H 640.2 H 646.4 H 652.6 H 658.8 H 665.0 H 671.3 H 677.5 H 683.7 H 689.9 H 696.1 H 702.4 H 708.6 H 714.8 H 721.0 H 727.2 H 733.4 H 739.7 H 745.9 H 752.1 H 758.3 H 764.5 H 770.8 H 777.0 H 783.2 H 789.4 H 795.6 H 801.8 H 808.1 H 814.3 H 820.5 H 826.7 H 832.9 H 839.2 H 845.4 H 851.6 H 857.8 H 864.0 H 870.3 H 876.5 H 882.7 H 888.9 H 895.1 H 901.3 H 907.6 H 913.8 H 920.0" fill="none" stroke="#00d2d3" stroke-width="2.5" stroke-linejoin="round" />
+<text x="165" y="140" fill="#ff9f43" font-size="13" text-anchor="end" font-weight="bold">CH1 (PIN 8)</text>
+<line x1="180" y1="150" x2="920" y2="150" stroke="#45475a" />
+<path d="M 180.0 150.0 H 186.2 H 192.4 H 198.7 H 204.9 H 211.1 H 217.3 H 223.5 H 229.7 H 236.0 H 242.2 H 248.4 H 254.6 H 260.8 H 267.1 H 273.3 H 279.5 H 285.7 H 291.9 H 298.2 H 304.4 H 310.6 H 316.8 H 323.0 H 329.2 H 335.5 H 341.7 H 347.9 H 354.1 H 360.3 H 366.6 H 372.8 H 379.0 H 385.2 H 391.4 H 397.6 H 403.9 H 410.1 H 416.3 H 422.5 H 428.7 H 435.0 H 441.2 H 447.4 H 453.6 H 459.8 H 466.1 H 472.3 H 478.5 H 484.7 H 490.9 H 497.1 H 503.4 H 509.6 H 515.8 H 522.0 H 528.2 H 534.5 H 540.7 H 546.9 H 553.1 H 559.3 H 565.5 H 571.8 H 578.0 H 584.2 H 590.4 H 596.6 H 602.9 H 609.1 H 615.3 H 621.5 H 627.7 H 633.9 H 640.2 H 646.4 H 652.6 H 658.8 H 665.0 H 671.3 H 677.5 H 683.7 H 689.9 H 696.1 H 702.4 H 708.6 H 714.8 H 721.0 H 727.2 H 733.4 H 739.7 H 745.9 H 752.1 H 758.3 H 764.5 H 770.8 H 777.0 H 783.2 H 789.4 H 795.6 H 801.8 H 808.1 H 814.3 H 820.5 H 826.7 H 832.9 H 839.2 H 845.4 H 851.6 H 857.8 H 864.0 H 870.3 H 876.5 H 882.7 H 888.9 H 895.1 H 901.3 H 907.6 H 913.8 H 920.0" fill="none" stroke="#ff9f43" stroke-width="2.5" stroke-linejoin="round" />
+<text x="165" y="205" fill="#1dd1a1" font-size="13" text-anchor="end" font-weight="bold">CH2 (PIN 9)</text>
+<line x1="180" y1="215" x2="920" y2="215" stroke="#45475a" />
+<path d="M 180.0 215.0 H 186.2 H 192.4 H 198.7 H 204.9 H 211.1 H 217.3 H 223.5 H 229.7 H 236.0 H 242.2 H 248.4 H 254.6 H 260.8 H 267.1 H 273.3 H 279.5 H 285.7 H 291.9 H 298.2 H 304.4 H 310.6 H 316.8 H 323.0 H 329.2 H 335.5 H 341.7 H 347.9 H 354.1 H 360.3 H 366.6 H 372.8 H 379.0 H 385.2 H 391.4 H 397.6 H 403.9 H 410.1 H 416.3 H 422.5 H 428.7 H 435.0 H 441.2 H 447.4 H 453.6 H 459.8 H 466.1 H 472.3 H 478.5 H 484.7 H 490.9 H 497.1 H 503.4 H 509.6 H 515.8 H 522.0 H 528.2 H 534.5 H 540.7 H 546.9 H 553.1 H 559.3 H 565.5 H 571.8 H 578.0 H 584.2 H 590.4 H 596.6 H 602.9 H 609.1 H 615.3 H 621.5 H 627.7 H 633.9 H 640.2 H 646.4 H 652.6 H 658.8 H 665.0 H 671.3 H 677.5 H 683.7 H 689.9 H 696.1 H 702.4 H 708.6 H 714.8 H 721.0 H 727.2 H 733.4 H 739.7 H 745.9 H 752.1 H 758.3 H 764.5 H 770.8 H 777.0 H 783.2 H 789.4 H 795.6 H 801.8 H 808.1 H 814.3 H 820.5 H 826.7 H 832.9 H 839.2 H 845.4 H 851.6 H 857.8 H 864.0 H 870.3 H 876.5 H 882.7 H 888.9 H 895.1 H 901.3 H 907.6 H 913.8 H 920.0" fill="none" stroke="#1dd1a1" stroke-width="2.5" stroke-linejoin="round" />
+<text x="165" y="270" fill="#ee5253" font-size="13" text-anchor="end" font-weight="bold">CH3 (PIN 10 -> PIN 11)</text>
+<line x1="180" y1="280" x2="920" y2="280" stroke="#45475a" />
+<path d="M 180.0 250.0 H 186.2 H 192.4 H 198.7 H 204.9 H 211.1 H 217.3 H 223.5 H 229.7 H 236.0 H 242.2 H 248.4 H 254.6 H 260.8 H 267.1 H 273.3 H 279.5 H 285.7 H 291.9 H 298.2 H 304.4 H 310.6 H 316.8 H 323.0 H 329.2 H 335.5 V 280.0 H 341.7 H 347.9 H 354.1 H 360.3 H 366.6 H 372.8 H 379.0 H 385.2 H 391.4 H 397.6 H 403.9 H 410.1 H 416.3 H 422.5 H 428.7 H 435.0 H 441.2 H 447.4 H 453.6 H 459.8 H 466.1 H 472.3 H 478.5 H 484.7 H 490.9 H 497.1 H 503.4 H 509.6 H 515.8 H 522.0 H 528.2 H 534.5 H 540.7 H 546.9 H 553.1 H 559.3 H 565.5 H 571.8 H 578.0 H 584.2 H 590.4 H 596.6 H 602.9 H 609.1 H 615.3 H 621.5 H 627.7 H 633.9 H 640.2 H 646.4 H 652.6 H 658.8 H 665.0 H 671.3 H 677.5 H 683.7 H 689.9 H 696.1 H 702.4 H 708.6 H 714.8 H 721.0 H 727.2 H 733.4 H 739.7 H 745.9 H 752.1 H 758.3 H 764.5 H 770.8 H 777.0 H 783.2 H 789.4 H 795.6 H 801.8 H 808.1 H 814.3 H 820.5 H 826.7 H 832.9 H 839.2 H 845.4 H 851.6 H 857.8 H 864.0 H 870.3 H 876.5 H 882.7 H 888.9 H 895.1 H 901.3 H 907.6 H 913.8 H 920.0" fill="none" stroke="#ee5253" stroke-width="2.5" stroke-linejoin="round" />
+</svg>
