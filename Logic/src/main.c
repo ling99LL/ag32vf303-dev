@@ -378,14 +378,16 @@ static void execute_capture(void) {
       tud_task();
       if (tud_cdc_connected()) {
         uint32_t avail = tud_cdc_write_available();
-        if (avail > 0) {
+        while (avail >= 64 && sent < count) {
           uint32_t to_send = count - sent;
           if (to_send > avail) to_send = avail;
           uint32_t n = tud_cdc_write(&sample_buffer[sent], to_send);
+          if (n == 0) break;
           sent += n;
-          tud_cdc_write_flush();
+          avail -= n;
           tx_start = UTIL_GetTick();
         }
+        tud_cdc_write_flush();
       } else {
         while (sent < count) {
           while (UART_IsTxFifoFull(UART0)) {}
@@ -439,6 +441,35 @@ static void execute_capture(void) {
   set_led(LED_IDLE_BIT, 1); // PIN_12 ON
 }
 
+// Dedicated raw USB Full-Speed throughput benchmark function (Optimized Batching)
+static void execute_usb_benchmark(uint32_t total_bytes) {
+  static uint8_t test_chunk[512];
+  for (int i = 0; i < 512; i++) test_chunk[i] = (uint8_t)(i & 0xFF);
+
+  uint32_t sent = 0;
+  uint32_t t_start = UTIL_GetTick();
+
+  while (sent < total_bytes) {
+    tud_task();
+    if (tud_cdc_connected()) {
+      uint32_t avail = tud_cdc_write_available();
+      if (avail > 0) {
+        uint32_t to_send = total_bytes - sent;
+        if (to_send > avail) to_send = avail;
+        if (to_send > sizeof(test_chunk)) to_send = sizeof(test_chunk);
+        uint32_t n = tud_cdc_write(test_chunk, to_send);
+        if (n > 0) {
+          sent += n;
+          tud_cdc_write_flush();
+          t_start = UTIL_GetTick();
+        }
+      }
+    }
+    if (UTIL_GetTick() - t_start > 3000) break;
+  }
+  tud_task();
+  tud_cdc_write_flush();
+}
 static void process_sump_byte(uint8_t b) {
   static uint8_t cmd_buf[5];
   static int cmd_state = 0;
@@ -457,6 +488,18 @@ static void process_sump_byte(uint8_t b) {
       send_metadata();
     } else if (b == SUMP_RUN) {
       execute_capture();
+    } else if (b == 0x0A) {
+      execute_usb_benchmark(sample_limit ? sample_limit : 65536);
+    } else if (b == 0x0B) { // 16 KB
+      execute_usb_benchmark(16384);
+    } else if (b == 0x0C) { // 32 KB
+      execute_usb_benchmark(32768);
+    } else if (b == 0x0D) { // 64 KB
+      execute_usb_benchmark(65536);
+    } else if (b == 0x0E) { // 128 KB
+      execute_usb_benchmark(131072);
+    } else if (b == 0x0F) { // 256 KB
+      execute_usb_benchmark(262144);
     } else if ((b & 0x80) != 0) {
       cmd_buf[0] = b;
       cmd_state = 1;
