@@ -501,8 +501,37 @@ static void process_sump_byte(uint8_t b) {
   }
 }
 
+// Configure weak pull-down on input pins (CH0~CH3: PIN_7..10 and PIN_1) to prevent floating crosstalk
+static void config_pin_pulldowns(void) {
+  PERIPHERAL_ENABLE(FCB, 0);
+  SYS_ClkSourceTypeDef clk_src = SYS_GetClkSource();
+  SYS_SetClkSource(SYS_CLK_SOURCE_HSI);
+
+  FCB_IO_TypeDef local_io;
+  FCB_ReadIOConfig(&local_io);
+
+  FCB_PIN_TypeDef pin_cfg;
+  const int pulldown_pins[] = {
+    AGRV2KQ32_PIN_1_ID,   // 50MHz Crystal Input / Clock Pad
+    AGRV2KQ32_PIN_7_ID,   // CH0
+    AGRV2KQ32_PIN_8_ID,   // CH1
+    AGRV2KQ32_PIN_9_ID,   // CH2
+    AGRV2KQ32_PIN_10_ID   // CH3
+  };
+
+  for (size_t i = 0; i < sizeof(pulldown_pins)/sizeof(pulldown_pins[0]); i++) {
+    FCB_GetPinConfig(&local_io, pulldown_pins[i], &pin_cfg);
+    FCB_PIN_SetPullMode(&pin_cfg, FCB_PIN_PULL_DOWN);
+    FCB_SetPinConfig(&local_io, pulldown_pins[i], &pin_cfg);
+  }
+
+  FCB_WriteIOConfig(&local_io);
+  SYS_SetClkSource(clk_src);
+}
+
 int main(void) {
   board_init();
+  config_pin_pulldowns();
   osc_init();
 
   // Initialize TinyUSB Device Stack

@@ -13,6 +13,7 @@ module logic_board (
   GPIO4_4,
   PIN_HSE,
   PIN_HSI,
+  PIN_OSC,
   PLL_CLKIN,
   TEST_OUT,
   UART0_UARTRXD,
@@ -30,12 +31,16 @@ inout         GPIO4_3;
 inout         GPIO4_4;
 input         PIN_HSE;
 input         PIN_HSI;
+input         PIN_OSC;
 input         PLL_CLKIN;
 output        TEST_OUT;
 input         UART0_UARTRXD;
 output        UART0_UARTTXD;
 inout         USB0_DM;
 inout         USB0_DP;
+
+// PLL_CLKIN
+assign PIN_1_in = PLL_CLKIN;
 
 // GPIO4_1, GPIO4_1
 assign PIN_12_in = GPIO4_1;
@@ -75,8 +80,8 @@ assign PIN_HSE_in = PIN_HSE;
 // PIN_HSI
 assign PIN_HSI_in = PIN_HSI;
 
-// PLL_CLKIN, PIN_OSC
-assign PIN_OSC_in = PLL_CLKIN;
+// PIN_OSC
+assign PIN_OSC_in = PIN_OSC;
 
 wire       sys_gck;
 wire [4:0] PLL_CLKOUT;
@@ -88,7 +93,7 @@ wire [4:0] PLL_CLKOUT;
 
 `ifdef ALTA_SYN
 alta_pllve pll_inst (
-  .clkin(PIN_OSC_in),
+  .clkin(PIN_1_in),
   .pfden(1'b1),
   .resetn(PLL_ENABLE),
   .phasecounterselect(3'b0),
@@ -109,13 +114,13 @@ alta_pllve pll_inst (
   .clkout3(PLL_CLKOUT[3]),
   .clkout4(PLL_CLKOUT[4]),
   .lock   (PLL_LOCK));
-defparam pll_inst.CLKIN_FREQ      = "8.0";
-defparam pll_inst.CLKIN_HIGH      = 8'd0;
-defparam pll_inst.CLKIN_LOW       = 8'd0;
+defparam pll_inst.CLKIN_FREQ      = "50.0";
+defparam pll_inst.CLKIN_HIGH      = 8'd5;
+defparam pll_inst.CLKIN_LOW       = 8'd5;
 defparam pll_inst.CLKIN_TRIM      = 1'b0;
 defparam pll_inst.CLKIN_BYPASS    = 1'b0;
-defparam pll_inst.CLKFB_HIGH      = 8'd149;
-defparam pll_inst.CLKFB_LOW       = 8'd149;
+defparam pll_inst.CLKFB_HIGH      = 8'd143;
+defparam pll_inst.CLKFB_LOW       = 8'd143;
 defparam pll_inst.CLKFB_TRIM      = 1'b0;
 defparam pll_inst.CLKFB_BYPASS    = 1'b0;
 defparam pll_inst.CLKDIV0_EN      = 1'b1;
@@ -163,27 +168,27 @@ defparam pll_inst.VCO_POST_DIV    = 1'b0;
 `else
 altpll pll_inst (
   .areset(!PLL_ENABLE),
-  .inclk ({1'b0, PIN_OSC_in}),
+  .inclk ({1'b0, PIN_1_in}),
   .clk   (PLL_CLKOUT),
   .locked(PLL_LOCK));
 defparam pll_inst.bandwidth_type          = "AUTO";
-defparam pll_inst.clk0_divide_by          = 12;
-defparam pll_inst.clk0_multiply_by        = 300;
+defparam pll_inst.clk0_divide_by          = 72;
+defparam pll_inst.clk0_multiply_by        = 288;
 defparam pll_inst.clk0_phase_shift        = "0";
-defparam pll_inst.clk1_divide_by          = 40;
-defparam pll_inst.clk1_multiply_by        = 300;
+defparam pll_inst.clk1_divide_by          = 240;
+defparam pll_inst.clk1_multiply_by        = 288;
 defparam pll_inst.clk1_phase_shift        = "0";
-defparam pll_inst.clk2_divide_by          = 12;
-defparam pll_inst.clk2_multiply_by        = 300;
+defparam pll_inst.clk2_divide_by          = 72;
+defparam pll_inst.clk2_multiply_by        = 288;
 defparam pll_inst.clk2_phase_shift        = "0";
-defparam pll_inst.clk3_divide_by          = 12;
-defparam pll_inst.clk3_multiply_by        = 300;
+defparam pll_inst.clk3_divide_by          = 72;
+defparam pll_inst.clk3_multiply_by        = 288;
 defparam pll_inst.clk3_phase_shift        = "0";
-defparam pll_inst.clk4_divide_by          = 12;
-defparam pll_inst.clk4_multiply_by        = 300;
+defparam pll_inst.clk4_divide_by          = 72;
+defparam pll_inst.clk4_multiply_by        = 288;
 defparam pll_inst.clk4_phase_shift        = "0";
 defparam pll_inst.compensate_clock        = "CLK0";
-defparam pll_inst.inclk0_input_frequency  = 125000;
+defparam pll_inst.inclk0_input_frequency  = 20000;
 defparam pll_inst.lpm_type                = "altpll";
 defparam pll_inst.operation_mode          = "NORMAL";
 defparam pll_inst.pll_type                = "AUTO";

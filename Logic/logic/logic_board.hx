@@ -8,7 +8,7 @@
 #endif
 
 #ifndef BOARD_HSE_FREQUENCY
-#define BOARD_HSE_FREQUENCY 8000000
+#define BOARD_HSE_FREQUENCY 50000000
 #endif
 
 #ifndef BOARD_OSC_FREQUENCY
@@ -24,14 +24,8 @@
 #endif
 
 #ifndef BOARD_PLL_CLKIN
-#define BOARD_PLL_CLKIN PIN_OSC
+#define BOARD_PLL_CLKIN PIN_1
 #endif
-
-#ifndef BOARD_HSE_BYPASS
-#define BOARD_HSE_BYPASS SYS_HSE_NONE
-#endif
-
-#define BOARD_OSC_CALIBRATION
 
 #define USB0_MODE device
 

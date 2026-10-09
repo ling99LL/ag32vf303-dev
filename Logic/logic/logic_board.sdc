@@ -5,7 +5,7 @@ if { ! [info exists ::HSI_PERIOD] } {
 create_clock -name PIN_HSI -period $::HSI_PERIOD [get_ports PIN_HSI]
 set_clock_groups -asynchronous -group PIN_HSI
 if { ! [info exists ::HSE_PERIOD] } {
-  set ::HSE_PERIOD 125.0
+  set ::HSE_PERIOD 20.0
 }
 create_clock -name PIN_HSE -period $::HSE_PERIOD [get_ports PIN_HSE]
 set_clock_groups -asynchronous -group PIN_HSE
