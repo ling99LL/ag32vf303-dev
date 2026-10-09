@@ -512,7 +512,6 @@ static void config_pin_pulldowns(void) {
 
   FCB_PIN_TypeDef pin_cfg;
   const int pulldown_pins[] = {
-    AGRV2KQ32_PIN_1_ID,   // 50MHz Crystal Input / Clock Pad
     AGRV2KQ32_PIN_7_ID,   // CH0
     AGRV2KQ32_PIN_8_ID,   // CH1
     AGRV2KQ32_PIN_9_ID,   // CH2
