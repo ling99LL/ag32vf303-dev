@@ -1,102 +1,121 @@
 # AG32VF303 开发工作区（AGM 遨格芯 RISC-V MCU + CPLD）
 
-> 一台新电脑：装好环境 → `git clone` 本仓库 → 直接开发。私有仓库，配套交接文档见 [`docs/HANDOVER.md`](docs/HANDOVER.md)。
+本仓库是围绕 **AG32VF303**（目标芯片 AG32VF303KCU6，QFN-32）的完整工程与方案开发工作区：包含环境配置记录、CPLD 片上逻辑分析仪、FOC 电机驱动、标准工程模板、CAN/UART 复用测试及官方例程归档。
 
-AGM **AG32** 系列把一颗 240MHz 级 RISC-V MCU 和 2K LE 的 CPLD 做进同一颗芯片，外设引脚全部经由 CPLD 布线区自由映射（`.ve` 文件定义）。本仓库是围绕 **AG32VF303**（目标芯片 AG32VF303KCU6，QFN-32）的完整开发工作区：环境配置记录、标准工程模板、MCU/纯 CPLD 两种流水灯实现、CAN/UART 复用测试、FOC 力反馈旋钮工程，以及官方例程归档。
-
-## 仓库内容
-
-```
-├── AGENTS.md                        # ZCode/agent 工作区指令（含硬性规则速查）
-├── docs/
-│   ├── HANDOVER.md                  # ★ 权威交接文档：环境重现、烧录流程、排障表、纯 CPLD 三段式编译
-│   ├── AGM_DAP_LINK_Rev2.51.pdf     # DAPLink 手册（p.12-13 = QFN32 完整引脚表）
-│   ├── AG32_IDE开发环境搭建.pdf      # 官方环境搭建
-│   └── AG32_MCU产品概览.pdf          # 产品线概览
-├── projects/
-│   ├── ag32vf303_flowled/           # 标准验证工程（本仓库的"模板工程"）
-│   │   ├── platformio.ini           # 双环境：-e flow（MCU 版）/ -e cpldled（纯 CPLD 版）
-│   │   ├── nano_board.ve            # 100 脚 demo 板引脚映射（LED + UART0）
-│   │   ├── cpld_board.ve            # 纯 CPLD 版引脚映射（LED_D1..4 为 :OUTPUT 信号）
-│   │   ├── src/flow_main.c          # MCU 版流水灯（软件计时）
-│   │   ├── src/min_main.c           # 纯 CPLD 版的最小 MCU 宿主（空循环）
-│   │   └── logic/                   # prelogic 生成的 Supra/Quartus 工程 + 用户 Verilog analog_ip.v
-│   └── can_uart_test/               # CAN/UART 复用测试工程
-├── foc/foc_knob/                    # FOC 力反馈旋钮工程（硬件 + host 上位机脚本）
-├── example/                         # AGM 官方例程归档（勿改，接口约定与引脚定义的出处）
-└── example_logic_led/               # 官方 CPLD LED 例程归档（勿改）
-```
-
-## 环境搭建（新电脑，约 30 分钟）
-
-详细步骤与截图级说明见 [`docs/HANDOVER.md`](docs/HANDOVER.md) §2，概要：
-
-1. **前置**：Windows 10/11 64 位，8G+ 内存；安装 [VSCode](https://code.visualstudio.com/) 与 [Python ≥3.10](https://www.python.org/)
-2. **SDK**：百度网盘 `pan.baidu.com/s/17bp-zAnsYRuVMRTSSVHN5A`（提取码 `12ej`）下载最新 `AgRV_pio-x.x.x-win64-release.exe`，静默安装：
-   ```bat
-   AgRV_pio-1.8.10-win64-release.exe -s
-   ```
-   自动部署 PlatformIO Core + AgRV 平台 + RISC-V GCC + Supra + OpenOCD 到 `%USERPROFILE%\.platformio`
-3. **VSCode 扩展**：`code --install-extension platformio.platformio-ide`
-4. **硬件**：AGM 官方 DAPLink（CMSIS-DAP v2，Win10 免驱）+ 开发板；确认 DAPLink 上 **J3V 跳线连通**（排线给目标板供电）、J4 断开
-5. **验证**：设备管理器出现 `CMSIS-DAP v2` + `USB 串行设备 (COMx)`；工程目录 `pio run -e flow` 编译通过
-
-> 注意：SDK 与工程路径**不能含中文**；用户目录需为英文。
-
-## 快速开始
-
-```bash
-pio="C:/Users/Administrator/.platformio/penv/Scripts/pio.exe"
-
-# MCU 版流水灯（软件计时，GPIO4_1..4 → PIN_34/33/32/31，低电平点亮）
-$pio run -e flow -t upload          # 编译 + 烧录（自动先校验/烧逻辑位流，再烧程序）
-$pio run -e flow -t monitor         # 串口看 printf
-
-# 纯 CPLD 版流水灯（硬件计数器，halt CPU 灯照常流）
-$pio run -e cpldled -t prelogic     # ① 生成 Supra/Quartus 工程
-cd logic
-C:/altera/13.0sp1/quartus/bin64/quartus_sh.exe -t run_quartus.tcl   # ② Quartus 综合
-cmd /c run_supra.bat                # ③ Supra 布局布线 → cpld_board.bin
-cd ..
-$pio run -e cpldled -t logic        # ④ 烧逻辑位流
-$pio run -e cpldled -t upload       # ⑤ 烧最小 MCU 宿主
-```
-
-| | MCU 版（`-e flow`） | 纯 CPLD 版（`-e cpldled`） |
-|---|---|---|
-| 节拍来源 | C 代码软件计时 | fabric 内 32 位计数器（200MHz 硬件分频） |
-| 改花样 | 改 C → 只重烧程序 | 改 Verilog → 三段式重烧逻辑 |
-| CPU 依赖 | 停 CPU 灯停 | **halt CPU 灯照常流** |
-| 用途 | 业务逻辑 | 独立指示灯 / 确定性时序 / 不占 CPU |
-
-## 硬性规则（踩坑总结，务必遵守）
-
-1. **`logic_device` 必须匹配封装**：100 脚 demo 板 = 默认 `AGRV2KL100`（不写即默认）；QFN32 KCU6 = `AGRV2KQ32`
-2. **必须先烧 LOGIC 才能访问 MCU**（调试口也依赖 logic 路由；空 logic 板 `reset run` 卡 ROM）
-3. **logic 地址陷阱**：压缩位流 `0x80034000`、未压缩 `0x80027000`，芯片选项字节记录 ROM 加载地址且 `-t logic` 不更新它——工程统一 `logic_compress = true`
-4. **改 `.ve`** → 重走逻辑编译并烧 logic；只改 C → 仅 `upload`
-5. DAPLink 供电靠 **J3V 跳线**（DPIDR 读回 0 = 板子没电，先查它）
-6. 板载 LED：GPIO4_1..4 → die pads PIN_34/33/32/31，**低电平点亮**（接 VCC 侧）
-7. 工程路径不能含中文；COM 口随 USB 口漂移
-8. 用户 Verilog 必须写在 `logic/analog_ip.v` **module 内部**（Quartus 13 按 Verilog-2001 解析）
-9. 给 af.exe 传参用 `.bat` 包装文件（内联引号会被打碎）
-
-完整排障表（DPIDR=0、卡 ROM、device id 不符、引脚报错等）见 [`docs/HANDOVER.md`](docs/HANDOVER.md) §5。
-
-## 换到 QFN32 自研板（AG32VF303KCU6）
-
-1. `platformio.ini` 加 `logic_device = AGRV2KQ32`
-2. 按 `docs/AGM_DAP_LINK_Rev2.51.pdf` **p.12-13** 的 QFN32 引脚表重写 `.ve`（可用 pad：1,2,3,5,7-15,18-23,26-29,31；PIN_24/25 = JTMS/JTCK 调试口不可挪用；PIN_20/21 留给 UART0）
-3. DAPLink 接线只需四根：TCK→PIN_25、TMS→PIN_24、GND、VCC3V3
-4. 重走逻辑编译 + 烧录
-
-## 硬件与资料
-
-- **开发板**：AGM 100 脚 demo 板（AG32VF303 级 die，256KB Flash / 128KB SRAM，device id `0x40200001`）
-- **目标芯片**：AG32VF303KCU6 —— QFN-32，26 IO，RISC-V 200/248MHz + 2K LE CPLD，12bit ADC / 10bit DAC
-- **下载器**：AGM 官方 DAPLink（CMSIS-DAP v2，VID:PID 0xcafe:0x1001）
-- **官方渠道**：[tcx-micro.com](http://www.tcx-micro.com/)（资料站）、[agmsemi.com](http://www.agmsemi.com/)、QQ 群 379254175、tech@agmsemi.com
-- 参考项目：[scottbez1/smartknob](https://github.com/scottbez1/smartknob)（未包含在本仓库）
+AGM **AG32** 系列将一颗 240MHz 级 RISC-V MCU 与 2K LE 的 CPLD 集成在单颗芯片内，外设引脚全部经由 CPLD 布线区自由映射（通过 `.ve` 约束文件定义）。
 
 ---
-*环境验收记录与踩坑过程详见 `docs/HANDOVER.md`。 maintained by [@ling99LL](https://github.com/ling99LL)*
+
+## 核心工程概览
+
+| 模块 / 路径 | 目标芯片 / 封装 | 核心特性 / 功用 |
+|---|---|---|
+| **[`Logic/`](Logic/)** | AG32VF303KCU6 (QFN-32) | **4 通道 CPLD 硬件逻辑分析仪**：100MSa/s 硬件采样、Block RAM 缓冲、硬件边沿触发与预触发、实时 RLE 压缩，原生兼容 SUMP / PulseView。 |
+| **[`FOC2205/`](FOC2205/)** | AG32VF303KCU6 (QFN-32) | **独立三相 FOC 驱动板**：MT6701 磁编码器 + DRV8316C 驱动 + 2205 无刷电机，三电阻电流采样与 SVPWM 控制。 |
+| **[`projects/ag32vf303_flowled/`](projects/ag32vf303_flowled/)** | 100 脚 Demo / QFN-32 | **标准验证模板**：MCU 软件版 (`-e flow`) 与纯 CPLD 硬件版 (`-e cpldled`) 双流水灯参考。 |
+| **[`projects/can_uart_test/`](projects/can_uart_test/)** | AG32VF303 | CAN 与 UART 引脚复用与回环测试工程。 |
+| **[`foc/foc_knob/`](foc/foc_knob/)** | AG32 系列 | FOC 力反馈旋钮原型工程与 Host 上位机脚本。 |
+
+---
+
+## 目录结构
+
+```text
+├── AGENTS.md                        # AI Agent 工作区指令与硬性规则速查
+├── docs/                            # 架构交接与芯片参考手册
+│   ├── HANDOVER.md                  # ★ 权威交接文档：环境重现、烧录流程、排障表、纯 CPLD 编译
+│   ├── AGM_DAP_LINK_Rev2.51.pdf     # DAPLink 手册（p.12-13 为 QFN32 完整引脚表）
+│   ├── AG32_IDE开发环境搭建.pdf      # 官方环境搭建文档
+│   └── AG32_MCU产品概览.pdf          # 产品线概览
+├── Logic/                           # ★ CPLD 硬件逻辑分析仪工程 (PulseView/SUMP 原生支持)
+├── FOC2205/                         # ★ 独立 FOC 驱动板工程 (DRV8316 + MT6701 + 2205 电机)
+├── projects/
+│   ├── ag32vf303_flowled/           # 标准验证工程（MCU/CPLD 双环境流水灯）
+│   └── can_uart_test/               # CAN/UART 复用测试工程
+├── foc/foc_knob/                    # FOC 力反馈旋钮验证工程
+├── example/                         # AGM 官方例程归档（只读参考）
+└── example_logic_led/               # 官方 CPLD LED 例程归档（只读参考）
+```
+
+---
+
+## 环境搭建
+
+详细步骤与图文说明见 [`docs/HANDOVER.md`](docs/HANDOVER.md) §2：
+
+1. **操作系统**：Windows 10/11 64 位；安装 [VSCode](https://code.visualstudio.com/) 与 [Python ≥3.10](https://www.python.org/)。
+2. **SDK 安装**：
+   从百度网盘 `pan.baidu.com/s/17bp-zAnsYRuVMRTSSVHN5A`（提取码 `12ej`）下载最新版 `AgRV_pio-x.x.x-win64-release.exe`，静默安装：
+   ```cmd
+   AgRV_pio-1.8.10-win64-release.exe -s
+   ```
+   自动部署 PlatformIO Core、AgRV 平台、RISC-V GCC、Supra 与 OpenOCD 到 `%USERPROFILE%\.platformio`。
+3. **VSCode 插件**：安装 `platformio.platformio-ide` 扩展。
+4. **硬件连接**：
+   - 使用 AGM 官方 DAPLink（CMSIS-DAP v2）。
+   - 确认 DAPLink 上的 **J3V 跳线短接**（通过排线为目标板供电），**J4 跳线断开**。
+5. **验证环境**：
+   设备管理器中出现 `CMSIS-DAP v2` 与 `USB 串行设备 (COMx)`；在终端中 `pio` 命令可正常调用。
+
+> **注意**：SDK 与工程所在路径**严禁包含中文或空格**。
+
+---
+
+## 快速上手与常用命令
+
+建议在命令行中将 PlatformIO 加入系统环境变量（PATH），或直接调用 `%USERPROFILE%\.platformio\penv\Scripts\pio.exe`：
+
+### 1. CPLD 硬件逻辑分析仪 (`Logic/`)
+```bash
+cd Logic
+pio run -e logic_board -t upload     # 编译固件并烧录
+pio run -e logic_board -t monitor    # 查看运行日志 (USB CDC / UART)
+```
+- 配合上位机：PulseView 选用 Openbench Logic Sniffer (OLS) 驱动连接，采样率最高可达 100 MSa/s。
+
+### 2. FOC 2205 电机驱动工程 (`FOC2205/`)
+```bash
+cd FOC2205
+pio run -e foc2205 -t upload         # 烧录固件
+pio run -e foc2205 -t monitor        # 监听 115200 调试输出
+```
+
+### 3. 流水灯验证模板 (`projects/ag32vf303_flowled/`)
+```bash
+cd projects/ag32vf303_flowled
+
+# MCU 软件流水灯 (GPIO4_1..4 -> PIN_34/33/32/31)
+pio run -e flow -t upload
+
+# 纯 CPLD 硬件分频流水灯 (CPU 挂起仍正常运行)
+pio run -e cpldled -t prelogic
+cd logic
+quartus_sh -t run_quartus.tcl
+cmd /c run_supra.bat
+cd ..
+pio run -e cpldled -t logic          # 烧录 CPLD 位流
+pio run -e cpldled -t upload         # 烧录最小 MCU 镜像
+```
+
+---
+
+## 芯片开发硬性规则
+
+1. **`logic_device` 匹配封装**：
+   - 100 脚 Demo 板：默认 `AGRV2KL100`。
+   - QFN-32 (AG32VF303KCU6)：必须显式声明 `logic_device = AGRV2KQ32`。
+2. **必须先烧录 LOGIC 才能调试 MCU**：JTAG 调试引脚同样经过 CPLD 路由；逻辑为空时 MCU 处于未配置状态。
+3. **位流压缩配置**：工程统一采用 `logic_compress = true`（压缩位流烧录地址 `0x80034000`）。
+4. **管脚修改规则**：只要修改 `.ve` 约束文件，必须重新执行完整的逻辑生成与位流烧录流程；单纯修改 C 代码只需 `upload`。
+5. **DAPLink 供电排查**：若 DAPLink 返回 `DPIDR = 0x00000000`，代表目标板未上电，请检查 J3V 跳线与目标板连接。
+
+---
+
+## 硬件与参考资源
+
+- **目标芯片**：AG32VF303KCU6（QFN-32，26 可用 IO，RISC-V 248MHz + 2K LE CPLD，12-bit ADC）
+- **官方渠道**：[tcx-micro.com](http://www.tcx-micro.com/)（资料站）、[agmsemi.com](http://www.agmsemi.com/)、官方支持邮箱 `tech@agmsemi.com`、QQ 技术群 `379254175`
+- **参考项目**：[scottbez1/smartknob](https://github.com/scottbez1/smartknob)
+
+---
+*环境排障指南与完整调试步骤请查阅 [`docs/HANDOVER.md`](docs/HANDOVER.md)。*
