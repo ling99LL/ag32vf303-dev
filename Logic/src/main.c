@@ -383,9 +383,7 @@ static void execute_capture(void) {
           if (to_send > avail) to_send = avail;
           uint32_t n = tud_cdc_write(&sample_buffer[sent], to_send);
           sent += n;
-          if (sent >= count || avail <= 64) {
-            tud_cdc_write_flush();
-          }
+          tud_cdc_write_flush();
           tx_start = UTIL_GetTick();
         }
       } else {
