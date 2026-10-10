@@ -2,9 +2,9 @@ import serial
 import time
 
 def set_test_divider(ser, div_val):
-    # Set CPLD test wave divider via SUMP or custom register command
-    # Currently test_div_limit default is 999 (100 kHz)
-    pass
+    # Manual TEST_DIV override via SUMP extension 0x83 (f = 100 MHz/(DIV+1)).
+    # 0xFFFF restores the automatic gear-table mapping.
+    ser.write(bytes([0x83, div_val & 0xFF, (div_val >> 8) & 0xFF, 0x00, 0x00]))
 
 def test_signal_response(port='COM33'):
     ser = serial.Serial(port, 115200, timeout=1.0)

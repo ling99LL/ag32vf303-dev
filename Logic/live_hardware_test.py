@@ -70,9 +70,9 @@ def auto_detect_and_test():
     print("    Sample Rate | Divider | Samples | High / Low  | Edges | Status    ")
     print("    ------------------------------------------------------------------")
     # rate = 100MHz/(div+1); test wave frequency per firmware table:
-    #   div==0 -> 1MHz, div==1 -> 500kHz, div<=9 -> 100kHz, else -> 20kHz
+    #   div==0 -> 50MHz, div==1 -> 25MHz, div<=4 -> 10MHz, else -> 20kHz
     def test_freq(div):
-        return 1e6 if div == 0 else 5e5 if div == 1 else 1e5 if div <= 9 else 2e4
+        return 50e6 if div == 0 else 25e6 if div == 1 else 10e6 if div <= 4 else 2e4
     rates = [
         ("100 MSa/s", 0, 1024),
         (" 50 MSa/s", 1, 1024),
@@ -104,9 +104,50 @@ def auto_detect_and_test():
         print(f"    {label:9s} | {div:7d} | {count:7d} | {h_cnt:4d} / {l_cnt:4d} | {edg:5d} | {'PASS' if passed else 'FAIL'}")
         if not passed: all_ok = False
 
+    # Manual test-divider override verification (SUMP ext 0x83, 0xFFFF = auto).
+    # Captures 10/25/50 MHz self-tests with integer samples/period so the
+    # expected edge count is exact (not alias-dependent).
+    print("\n[3b] High-Frequency Test-Wave Oversampling Verification (TEST_DIV override):")
+    print("     ---------------------------------------------------------------")
+    print("     Waveform                   | Divider | Edges | Expected | Status ")
+    print("     ---------------------------------------------------------------")
+    over_tests = [
+        ("50 MHz @ 100 MSa/s (2 sp)",  0, 1, 50e6),
+        ("25 MHz @ 100 MSa/s (4 sp)",  0, 3, 25e6),
+        ("10 MHz @ 100 MSa/s (10 sp)", 0, 9, 10e6),
+        ("25 MHz @  50 MSa/s (2 sp)",  1, 3, 25e6),
+        ("10 MHz @  50 MSa/s (5 sp)",  1, 9, 10e6),
+        ("10 MHz @  20 MSa/s (2 sp)",  4, 9, 10e6),
+    ]
+    for label, div, tdiv, freq in over_tests:
+        ser.write(bytes([0x83, tdiv & 0xFF, (tdiv >> 8) & 0xFF, 0x00, 0x00]))
+        time.sleep(0.01)
+        ser.write(bytes([0x80, div & 0xFF, (div >> 8) & 0xFF, 0x00, 0x00]))
+        count = 1024
+        words = count // 4 - 1
+        ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
+        ser.write(bytes([0xC0, 0x00, 0x00, 0x00, 0x00]))
+        ser.reset_input_buffer()
+        ser.write(bytes([0x01]))
+        buf = ser.read(count)
+        ch_vals = [(b >> bit) & 1 for b in buf]
+        h_cnt = sum(ch_vals)
+        l_cnt = count - h_cnt
+        edg = sum(1 for i in range(1, len(ch_vals)) if ch_vals[i] != ch_vals[i - 1])
+        period_samples = (100e6 / (div + 1)) / freq
+        expected_edg = 2.0 * count / period_samples
+        passed = (h_cnt > 0 and l_cnt > 0 and edg > 0) and (abs(edg - expected_edg) <= 0.4 * expected_edg)
+        print(f"     {label:27s} | {div:7d} | {edg:5d} | {expected_edg:7.1f} | {'PASS' if passed else 'FAIL'}")
+        if not passed: all_ok = False
+    ser.write(bytes([0x83, 0xFF, 0xFF, 0x00, 0x00]))
+    time.sleep(0.01)
+    print("     TEST_DIV override restored to AUTO.")
+
     # Instant Hardware Trigger Test
+    # Run at div=9 (10 MSa/s): auto gear table drives a 20 kHz test wave, so the
+    # first post-trigger sample (100 ns later) still sits at the triggered level.
     print(f"\n[4] Instant Hardware Level-Trigger Verification ({name} High Match):")
-    ser.write(bytes([0x80, 0x00, 0x00, 0x00, 0x00]))
+    ser.write(bytes([0x80, 0x09, 0x00, 0x00, 0x00]))
     words = 1024 // 4 - 1
     ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
     mask_val = (1 << bit)
@@ -120,9 +161,11 @@ def auto_detect_and_test():
     t_lat = (time.perf_counter() - t0) * 1000
 
     first_val = (trig_buf[0] >> bit) & 1 if len(trig_buf) > 0 else -1
+    trig_ok = (first_val == 1)
     print(f"    - Trigger Condition  : {name} == 1")
-    print(f"    - First Captured Bit : {first_val} (Expected 1) -> {'PASS' if first_val == 1 else 'FAIL'}")
+    print(f"    - First Captured Bit : {first_val} (Expected 1) -> {'PASS' if trig_ok else 'FAIL'}")
     print(f"    - Total Turnaround   : {t_lat:.2f} ms (Includes 35ms LED feedback stretch)")
+    if not trig_ok: all_ok = False
 
     # Full Depth Test
     print("\n[5] Full Memory Capacity Test (8192 Samples Burst Upload):")

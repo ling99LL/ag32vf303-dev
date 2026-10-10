@@ -88,12 +88,14 @@ static inline void set_all_leds(int on) {
 #define SUMP_SET_DIVIDER      0x80
 #define SUMP_CAPTURE_SIZE     0x81
 #define SUMP_FLAGS            0x82
+#define SUMP_TEST_DIV         0x83
 
 static uint32_t sample_limit   = 8192;
 static uint32_t sample_delay   = 0;
 static uint32_t trigger_mask   = 0;
 static uint32_t trigger_val    = 0;
 static uint32_t sample_divider = 0;
+static uint16_t test_div_override = 0xFFFF;  // 0xFFFF = auto (gear table)
 static uint8_t  active_changroups = 1;
 static bool     rle_enabled = false;
 
@@ -233,15 +235,18 @@ static void execute_capture(void) {
     uint32_t eff_div = sample_divider & 0x7FFFFFFF;
     uint32_t clk_div = (eff_div > 0) ? (eff_div & 0xFFFFu) : 0; // 16-bit divider (1.5 kSa/s .. 100 MSa/s)
 
-    // Adaptively tune PIN_11 test wave generator frequency for optimal scope display:
-    if (clk_div == 0) {
-      CPLD_REG_TEST_DIV = 99;    // 1 MHz square wave (200MHz / 200)
+    // Test wave generator (PIN_11): f = 100 MHz / (TEST_DIV + 1), TEST_DIV is 16-bit.
+    // High-rate gears use Nyquist-aligned self-tests so loopback can be verified on CH0..CH3:
+    if (test_div_override != 0xFFFF) {
+      CPLD_REG_TEST_DIV = test_div_override;              // manual frequency (SUMP 0x83)
+    } else if (clk_div == 0) {
+      CPLD_REG_TEST_DIV = 1;    // 50 MHz square wave (200 MHz / 4), 2 samples/period @ 100 MSa/s
     } else if (clk_div == 1) {
-      CPLD_REG_TEST_DIV = 199;   // 500 kHz square wave
-    } else if (clk_div <= 9) {
-      CPLD_REG_TEST_DIV = 999;   // 100 kHz square wave
+      CPLD_REG_TEST_DIV = 3;    // 25 MHz square wave (200 MHz / 8), 2 samples/period @ 50 MSa/s
+    } else if (clk_div <= 4) {
+      CPLD_REG_TEST_DIV = 9;    // 10 MHz square wave (200 MHz / 20), 2 samples/period @ 20 MSa/s
     } else {
-      CPLD_REG_TEST_DIV = 4999;  // 20 kHz square wave for low-speed captures
+      CPLD_REG_TEST_DIV = 4999; // 20 kHz square wave for low-speed captures
     }
 
     // ARM CPLD Sampler (bit 0=ARM, bit 3=TEST_EN, bits [7:4]=mask, bits [11:8]=val, bit 12=edge_mode, bits [23:16]=clk_div)
@@ -486,6 +491,7 @@ static void process_sump_byte(uint8_t b) {
     if (b == SUMP_RESET) {
       set_all_leds(0);
       set_led(LED_IDLE_BIT, 1);
+      test_div_override = 0xFFFF;  // restore auto test-wave gear mapping
     } else if (b == SUMP_ID) {
       comm_send_byte('1');
       comm_send_byte('A');
@@ -525,6 +531,10 @@ static void process_sump_byte(uint8_t b) {
         uint16_t delaycount = (cmd_buf[4] << 8) | cmd_buf[3];
         sample_limit = (readcount + 1) * 4;
         sample_delay = (delaycount + 1) * 4;
+      } else if (op == SUMP_TEST_DIV) {
+        // Extension: manual test-wave divider (0xFFFF = auto gear table)
+        uint32_t val32 = (cmd_buf[4] << 24) | (cmd_buf[3] << 16) | (cmd_buf[2] << 8) | cmd_buf[1];
+        test_div_override = (uint16_t)(val32 & 0xFFFFu);
       } else if (op >= 0xC0 && op <= 0xCF) {
         // Standard SUMP / OLS: (op & 0x03) == 0x00 is MASK, 0x01 is VALUE
         uint32_t val32 = (cmd_buf[4] << 24) | (cmd_buf[3] << 16) | (cmd_buf[2] << 8) | cmd_buf[1];
