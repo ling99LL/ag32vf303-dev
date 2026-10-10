@@ -83,19 +83,20 @@ module analog_ip (
   reg [3:0]  trig_val  = 4'd0;
   reg        trig_edge_en = 1'b0;
   reg [15:0] sample_depth_words = 16'd1024; // 1024 words * 8 = 8192 samples
-  reg [7:0]  sample_clk_div = 8'd0;
+  reg [15:0] sample_clk_div = 16'd0;
 
   reg        busy = 1'b0;
   reg        done = 1'b0;
   reg        triggered = 1'b0;
-  reg [7:0]  div_cnt = 8'd0;
+  reg [15:0] div_cnt = 16'd0;
   reg [2:0]  sub_idx = 3'd0;
   reg [31:0] shift_buf = 32'd0;
   reg [15:0] word_idx = 16'd0;
   reg [9:0]  trig_pos = 10'd0;
+  reg [9:0]  wr_ptr   = 10'd0;
   reg [15:0] post_trig_words = 16'd1024;
   reg [15:0] post_cnt = 16'd0;
-  reg        post_sampling = 1'b0;
+
 
   // Dual-Port Block RAM: 1024 words x 32-bit = 32 Kbits
   reg [31:0] ram [0:1023];
@@ -103,7 +104,7 @@ module analog_ip (
   reg [31:0] ram_wr_data = 32'd0;
   reg        ram_wr_en   = 1'b0;
 
-  always @(posedge sys_clock) begin
+  always @(posedge bus_clock) begin
     if (ram_wr_en) begin
       ram[ram_wr_addr] <= ram_wr_data;
     end
@@ -114,7 +115,7 @@ module analog_ip (
   reg [3:0] ch_sync1 = 4'd0;
   reg [3:0] ch_prev  = 4'd0;
 
-  always @(posedge sys_clock) begin
+  always @(posedge bus_clock) begin
     ch_sync0 <= ch_raw;
     ch_sync1 <= ch_sync0;
     ch_prev  <= ch_sync1;
@@ -133,16 +134,36 @@ module analog_ip (
   wire trig_edge_mode = trig_edge_en;
   wire trig_match = trig_edge_mode ? (| (ch_edge & trig_mask)) : (((ch_current & trig_mask) == (trig_val & trig_mask)));
 
-  always @(posedge sys_clock or negedge resetn) begin
+  // Trigger detection runs EVERY bus cycle and latches a pending flag so
+  // 1-cycle edge pulses are never missed (a sample-tick-only check misses
+  // edges of signals phase-locked to the sample clock, e.g. the self-test
+  // wave: 10000-cycle period vs 10-cycle sample period).
+  reg trig_pending = 1'b0;
+  always @(posedge bus_clock or negedge resetn) begin
     if (!resetn) begin
-      busy        <= 1'b0;
-      done        <= 1'b0;
-      triggered   <= 1'b0;
-      div_cnt     <= 8'd0;
-      sub_idx     <= 3'd0;
-      shift_buf   <= 32'd0;
-      word_idx    <= 16'd0;
-      ram_wr_en   <= 1'b0;
+      trig_pending <= 1'b0;
+    end else if (!sampler_arm || busy) begin
+      trig_pending <= 1'b0;
+    end else if (sampler_force || trig_mask == 4'd0 || trig_match) begin
+      trig_pending <= 1'b1;
+    end
+  end
+
+  // Sample every (div+1) bus_clock cycles -> rate = 100MHz/(div+1), div up to 65535.
+
+  always @(posedge bus_clock or negedge resetn) begin
+    if (!resetn) begin
+      busy      <= 1'b0;
+      done      <= 1'b0;
+      triggered <= 1'b0;
+      div_cnt   <= 16'd0;
+      sub_idx   <= 3'd0;
+      shift_buf <= 32'd0;
+      word_idx  <= 16'd0;
+      wr_ptr    <= 10'd0;
+      trig_pos  <= 10'd0;
+      post_cnt  <= 16'd0;
+      ram_wr_en <= 1'b0;
     end else begin
       ram_wr_en <= 1'b0;
 
@@ -150,36 +171,65 @@ module analog_ip (
         busy      <= 1'b0;
         done      <= 1'b0;
         triggered <= 1'b0;
-        div_cnt   <= 8'd0;
+        div_cnt   <= 16'd0;
         sub_idx   <= 3'd0;
         word_idx  <= 16'd0;
+        wr_ptr    <= 10'd0;
+        trig_pos  <= 10'd0;
+        post_cnt  <= 16'd0;
       end else if (busy) begin
+        // Sampling active: circular BRAM fill continues after the trigger;
+        // post_cnt words (trigger word included) must be written before DONE.
         if (div_cnt < sample_clk_div) begin
-          div_cnt <= div_cnt + 8'd1;
+          div_cnt <= div_cnt + 16'd1;
         end else begin
-          div_cnt <= 8'd0;
+          div_cnt   <= 16'd0;
           shift_buf <= {ch_current, shift_buf[31:4]};
           sub_idx   <= sub_idx + 3'd1;
-
           if (sub_idx == 3'd7) begin
             ram_wr_data <= {ch_current, shift_buf[31:4]};
-            ram_wr_addr <= word_idx[9:0];
+            ram_wr_addr <= wr_ptr;
             ram_wr_en   <= 1'b1;
             word_idx    <= word_idx + 16'd1;
-
-            if (word_idx >= sample_depth_words - 16'd1) begin
+            if (wr_ptr >= sample_depth_words - 16'd1) begin
+              wr_ptr <= 10'd0;
+            end else begin
+              wr_ptr <= wr_ptr + 10'd1;
+            end
+            if (post_cnt >= post_trig_words - 16'd1) begin
               busy <= 1'b0;
               done <= 1'b1;
+            end else begin
+              post_cnt <= post_cnt + 16'd1;
             end
           end
         end
       end else if (!done) begin
-        if (sampler_force || trig_mask == 4'd0 || trig_match) begin
-          triggered <= 1'b1;
-          busy      <= 1'b1;
-          div_cnt   <= 8'd0;
-          sub_idx   <= 3'd0;
-          word_idx  <= 16'd0;
+        // Armed, waiting for trigger: keep sampling into the circular BRAM
+        // so pre-trigger history is always available.
+        if (div_cnt < sample_clk_div) begin
+          div_cnt <= div_cnt + 16'd1;
+        end else begin
+          div_cnt   <= 16'd0;
+          shift_buf <= {ch_current, shift_buf[31:4]};
+          sub_idx   <= sub_idx + 3'd1;
+          if (sub_idx == 3'd7) begin
+            ram_wr_data <= {ch_current, shift_buf[31:4]};
+            ram_wr_addr <= wr_ptr;
+            ram_wr_en   <= 1'b1;
+            word_idx    <= word_idx + 16'd1;
+            if (wr_ptr >= sample_depth_words - 16'd1) begin
+              wr_ptr <= 10'd0;
+            end else begin
+              wr_ptr <= wr_ptr + 10'd1;
+            end
+          end
+          if (trig_pending) begin
+            triggered <= 1'b1;
+            busy      <= 1'b1;
+            trig_pos  <= wr_ptr; // word index holding the trigger sample
+            post_cnt  <= 16'd0;
+          end
         end
       end
     end
@@ -250,7 +300,7 @@ module analog_ip (
           trig_mask      <= apb_pwdata[7:4];
           trig_val       <= apb_pwdata[11:8];
           trig_edge_en   <= apb_pwdata[12];
-          sample_clk_div <= apb_pwdata[23:16];
+          sample_clk_div <= apb_pwdata[31:16];
         end
         16'h0008: begin // 0x60000008: REG_DEPTH
           if (apb_pwdata[15:0] > 16'd0 && apb_pwdata[15:0] <= 16'd1024)
@@ -283,7 +333,7 @@ module analog_ip (
       apb_prdata = ram_rd_port;
     end else begin
       case (apb_paddr[15:0])
-        16'h0000: apb_prdata = {8'h0, sample_clk_div, 3'h0, trig_edge_en, trig_val, trig_mask, 1'b0, test_en, sampler_force, 1'b0, sampler_arm};
+        16'h0000: apb_prdata = {sample_clk_div, 3'h0, trig_edge_en, trig_val, trig_mask, test_en, sampler_force, 1'b0, sampler_arm};
         16'h0004: apb_prdata = {word_idx, 13'h0, triggered, done, busy};
         16'h0008: apb_prdata = {16'h0, sample_depth_words};
         16'h000C: apb_prdata = {16'h0, test_div_limit};

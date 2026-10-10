@@ -32,7 +32,7 @@
   pio run -e cpldled -t prelogic   # 自定义逻辑：生成 logic/ 工程
   ```
 - 自定义 CPLD 逻辑三段式（logic_dir 流程下 **buildlogic 不产位流**）：`prelogic` → `logic/run_quartus.tcl`（Quartus 无头综合）→ `logic/run_supra.bat`（Supra 布局布线）→ `-t logic` + `-t upload`。
-  - **脚本名勘误**：`run_quartus.tcl`/`run_supra.bat` 包装脚本只存在于 `projects/ag32vf303_flowled/logic/`。`FOC2205/logic/` 与 `Logic/logic/` 只有原始 `af_quartus.tcl` / `af_run.tcl`，需直接调 Quartus 与 Supra（`quartus_sh -t af_quartus.tcl` → `af_cmd.bat -f af_run.tcl`），各工程完整命令见其自身 README。
+  - **脚本位置**：`run_quartus.tcl`/`run_supra.bat` 包装脚本在 `projects/ag32vf303_flowled/logic/` 与 `Logic/logic/` 都有；只有 `FOC2205/logic/` 是原始 `af_quartus.tcl` / `af_run.tcl`，需直接调 Quartus 与 Supra（`quartus_sh -t af_quartus.tcl` → `af_cmd.bat -f af_run.tcl`），各工程完整命令见其自身 README。
 - OpenOCD 直读调试：`halt` 后用 `mem2array`+`echo`（`mdw` 在 openocd_cmd.bat 下可能静默），可 halt 后 `mww` 直接驱动 GPIO 验证硬件。
 
 ## 硬性规则（违反即失败）

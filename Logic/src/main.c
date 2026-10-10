@@ -4,7 +4,7 @@
  * Protocol: SUMP / Openbench Logic Sniffer (OLS) compatible for PulseView / Sigrok
  *
  * Hardware Architecture (Plan B):
- *   CPLD Hardware Sampler running at 100~200 MHz synchronous fabric clock
+ *   CPLD Hardware Sampler: 200 MHz fabric clock; SUMP divider D -> sample rate = 100 MHz/(D+1) (0..100 MSa/s, within measured Fmax 121.9 MHz)
  *   Channel Pinout (QFN32):
  *     CH0: PIN_7  (Input to CPLD sampler)
  *     CH1: PIN_8  (Input to CPLD sampler)
@@ -219,16 +219,19 @@ static void execute_capture(void) {
 
     // Pre-trigger vs Post-trigger calculation:
     // If sample_delay is configured (post-trigger samples), map to post_trig_words
-    uint32_t post_words = (sample_delay > 0) ? ((sample_delay + 7) / 8) : words_needed;
+    // SUMP delaycount = samples AFTER trigger (libsigrok: delay = read*(1-ratio));
+    // pre_words + post_words = words_needed. delaycount==0 -> pure pre-trigger.
+    uint32_t post_words = (sample_delay > 0) ? ((sample_delay + 7) / 8) : 1;
     if (post_words > words_needed) post_words = words_needed;
-    if (post_words == 0) post_words = words_needed;
+    if (post_words == 0) post_words = 1;
+    uint32_t pre_words = words_needed - post_words;
     CPLD_REG_POST_WORDS = post_words;
 
     uint8_t mask = (uint8_t)(trigger_mask & 0x0F);
     uint8_t val  = (uint8_t)(trigger_val & 0x0F);
 
     uint32_t eff_div = sample_divider & 0x7FFFFFFF;
-    uint32_t clk_div = (eff_div > 0) ? (eff_div & 0xFF) : 0;
+    uint32_t clk_div = (eff_div > 0) ? (eff_div & 0xFFFFu) : 0; // 16-bit divider (1.5 kSa/s .. 100 MSa/s)
 
     // Adaptively tune PIN_11 test wave generator frequency for optimal scope display:
     if (clk_div == 0) {
@@ -296,12 +299,17 @@ static void execute_capture(void) {
     set_led(LED_CAP_BIT, 0);
     set_led(LED_TX_BIT, 1); // PIN_18 ON
 
-    // Direct reverse unpacking from BRAM (Zero-Copy inversion)
-    // CPLD stored samples linearly: word 0 contains samples 0..7 (sample 0 at bits 3:0).
-    // SUMP expects reverse chronological order: latest sample first!
+    // OLS devices send their buffer backwards (newest first); libsigrok/PulseView
+    // reverse it again. Each CPLD word holds {s7..s0} with the newest sample in
+    // bits 31:28. The circular pre-trigger window starts at first_word and wraps
+    // at words_needed.
+    uint32_t trig_pos_w = (CPLD_REG_TRIG_POS >> 16) & 0x3FFu;
+    uint32_t first_word = (trig_pos_w + words_needed - pre_words) % words_needed;
+
     int32_t target_idx = 0;
-    for (int32_t w = (int32_t)words_needed - 1; w >= 0; w--) {
-      uint32_t word = CPLD_RAM_BASE[w];
+    for (int32_t k = (int32_t)words_needed - 1; k >= 0; k--) {
+      uint32_t wi   = (first_word + (uint32_t)k) % words_needed;
+      uint32_t word = CPLD_RAM_BASE[wi];
       if ((target_idx + 8) <= (int32_t)count) {
         sample_buffer[target_idx + 0] = (uint8_t)((word >> 28) & 0x0F);
         sample_buffer[target_idx + 1] = (uint8_t)((word >> 24) & 0x0F);

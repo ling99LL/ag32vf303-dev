@@ -27,7 +27,7 @@ def auto_detect_and_test():
     # Capture 1024 points at 100 MSa/s to scan all channels
     ser.write(bytes([0x80, 0x00, 0x00, 0x00, 0x00]))
     words = 1024 // 4 - 1
-    ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, 0x00, 0x00]))
+    ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
     ser.write(bytes([0xC0, 0x00, 0x00, 0x00, 0x00]))
     ser.reset_input_buffer()
     ser.write(bytes([0x01]))
@@ -69,6 +69,10 @@ def auto_detect_and_test():
     print("    ------------------------------------------------------------------")
     print("    Sample Rate | Divider | Samples | High / Low  | Edges | Status    ")
     print("    ------------------------------------------------------------------")
+    # rate = 100MHz/(div+1); test wave frequency per firmware table:
+    #   div==0 -> 1MHz, div==1 -> 500kHz, div<=9 -> 100kHz, else -> 20kHz
+    def test_freq(div):
+        return 1e6 if div == 0 else 5e5 if div == 1 else 1e5 if div <= 9 else 2e4
     rates = [
         ("100 MSa/s", 0, 1024),
         (" 50 MSa/s", 1, 1024),
@@ -83,7 +87,7 @@ def auto_detect_and_test():
     for label, div, count in rates:
         ser.write(bytes([0x80, div & 0xFF, (div >> 8) & 0xFF, 0x00, 0x00]))
         words = count // 4 - 1
-        ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, 0x00, 0x00]))
+        ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
         ser.write(bytes([0xC0, 0x00, 0x00, 0x00, 0x00]))
         ser.reset_input_buffer()
         ser.write(bytes([0x01]))
@@ -92,7 +96,11 @@ def auto_detect_and_test():
         h_cnt = sum(ch_vals)
         l_cnt = count - h_cnt
         edg = sum(1 for i in range(1, len(ch_vals)) if ch_vals[i] != ch_vals[i-1])
-        passed = (h_cnt > 0 and l_cnt > 0 and edg > 0)
+        # Absolute timebase check: count must match the known test-wave frequency
+        # within 40% (edge-count quantization).
+        period_samples = (100e6 / (div + 1)) / test_freq(div)
+        expected_edg = 2.0 * count / period_samples
+        passed = (h_cnt > 0 and l_cnt > 0 and edg > 0) and (abs(edg - expected_edg) <= 0.4 * expected_edg)
         print(f"    {label:9s} | {div:7d} | {count:7d} | {h_cnt:4d} / {l_cnt:4d} | {edg:5d} | {'PASS' if passed else 'FAIL'}")
         if not passed: all_ok = False
 
@@ -100,7 +108,7 @@ def auto_detect_and_test():
     print(f"\n[4] Instant Hardware Level-Trigger Verification ({name} High Match):")
     ser.write(bytes([0x80, 0x00, 0x00, 0x00, 0x00]))
     words = 1024 // 4 - 1
-    ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, 0x00, 0x00]))
+    ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
     mask_val = (1 << bit)
     ser.write(bytes([0xC0, mask_val, 0x00, 0x00, 0x00])) # Mask
     ser.write(bytes([0xC1, mask_val, 0x00, 0x00, 0x00])) # Value High
@@ -120,7 +128,7 @@ def auto_detect_and_test():
     print("\n[5] Full Memory Capacity Test (8192 Samples Burst Upload):")
     ser.write(bytes([0x80, 0x00, 0x00, 0x00, 0x00]))
     words = 8192 // 4 - 1
-    ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, 0x00, 0x00]))
+    ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
     ser.write(bytes([0xC0, 0x00, 0x00, 0x00, 0x00]))
     ser.reset_input_buffer()
     t0 = time.perf_counter()

@@ -19,7 +19,7 @@ def capture_samples(port="COM33", count=1024, divider=9):
     readcount = (count // 4) - 1
     if readcount < 0:
         readcount = 0
-    ser.write(bytes([0x81, readcount & 0xFF, (readcount >> 8) & 0xFF, 0, 0]))
+    ser.write(bytes([0x81, readcount & 0xFF, (readcount >> 8) & 0xFF, readcount & 0xFF, (readcount >> 8) & 0xFF]))
 
     # SUMP Flags (0x82): 1 changroup
     ser.write(bytes([0x82, 0, 0, 0, 0]))

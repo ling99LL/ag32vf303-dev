@@ -20,7 +20,7 @@ def test_signal_response(port='COM33'):
     for label, div, count in rates:
         ser.write(bytes([0x80, div, 0x00, 0x00, 0x00]))
         words = count // 4 - 1
-        ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, 0x00, 0x00]))
+        ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
         ser.write(bytes([0x01]))
         data = ser.read(count)
         ch3_high = sum(1 for b in data if (b >> 3) & 1)

@@ -1,4 +1,4 @@
-﻿import serial
+import serial
 import time
 import sys
 
@@ -42,7 +42,7 @@ def main():
     # 4. Perform Capture with 512 samples
     readcount_512 = (512 // 4) - 1
     ser.write(bytes([0x80, 0x09, 0, 0, 0])) # 10 MSa/s divider
-    ser.write(bytes([0x81, readcount_512 & 0xFF, (readcount_512 >> 8) & 0xFF, 0, 0]))
+    ser.write(bytes([0x81, readcount_512 & 0xFF, (readcount_512 >> 8) & 0xFF, readcount_512 & 0xFF, (readcount_512 >> 8) & 0xFF]))
     ser.write(bytes([0x82, 0, 0, 0, 0]))
     ser.write(bytes([0xC0, 0, 0, 0, 0]))
     ser.write(bytes([0xC1, 0, 0, 0, 0]))
@@ -56,7 +56,7 @@ def main():
 
     # 5. Perform Capture with 4096 samples
     readcount_4k = (4096 // 4) - 1
-    ser.write(bytes([0x81, readcount_4k & 0xFF, (readcount_4k >> 8) & 0xFF, 0, 0]))
+    ser.write(bytes([0x81, readcount_4k & 0xFF, (readcount_4k >> 8) & 0xFF, readcount_4k & 0xFF, (readcount_4k >> 8) & 0xFF]))
     ser.write(bytes([0x01]))
     t0 = time.time()
     samples_4k = ser.read(4096)
@@ -66,7 +66,7 @@ def main():
 
     # 6. Perform Full CPLD BRAM Capture (8192 samples)
     readcount_8k = (8192 // 4) - 1
-    ser.write(bytes([0x81, readcount_8k & 0xFF, (readcount_8k >> 8) & 0xFF, 0, 0]))
+    ser.write(bytes([0x81, readcount_8k & 0xFF, (readcount_8k >> 8) & 0xFF, readcount_8k & 0xFF, (readcount_8k >> 8) & 0xFF]))
     ser.write(bytes([0x01]))
     t0 = time.time()
     samples_8k = ser.read(8192)

@@ -1,4 +1,4 @@
-﻿import serial
+import serial
 import time
 import sys
 
@@ -42,7 +42,7 @@ def benchmark_suite(port="COM33"):
     for depth in test_depths:
         param = (depth // 4) - 1
         ser.write(bytes([0x80, 0, 0, 0, 0]))      # Divider 0 (Max speed: 100 MSa/s)
-        ser.write(bytes([0x81, param & 0xFF, (param >> 8) & 0xFF, 0, 0])) # Readcount
+        ser.write(bytes([0x81, param & 0xFF, (param >> 8) & 0xFF, param & 0xFF, (param >> 8) & 0xFF])) # Readcount, delaycount=readcount (all post)
         ser.write(bytes([0x82, 0, 0, 0, 0]))      # 1 changroup
         ser.write(bytes([0xC0, 0, 0, 0, 0]))      # Trigger val 0
         ser.write(bytes([0xC1, 0, 0, 0, 0]))      # Trigger mask 0 (Immediate)
@@ -64,7 +64,7 @@ def benchmark_suite(port="COM33"):
     for trig_name, mask, val in [("Immediate (Mask=0)", 0x00, 0x00), ("CH3 High Match (Mask=0x08, Val=0x08)", 0x08, 0x08)]:
         param = (1024 // 4) - 1
         ser.write(bytes([0x80, 9, 0, 0, 0]))      # 10 MSa/s
-        ser.write(bytes([0x81, param & 0xFF, (param >> 8) & 0xFF, 0, 0]))
+        ser.write(bytes([0x81, param & 0xFF, (param >> 8) & 0xFF, param & 0xFF, (param >> 8) & 0xFF]))
         ser.write(bytes([0x82, 0, 0, 0, 0]))
         ser.write(bytes([0xC0, val, 0, 0, 0]))
         ser.write(bytes([0xC1, mask, 0, 0, 0]))

@@ -19,3 +19,21 @@ set_false_path -from rv32|resetn_out
 # pio_end
 
 derive_pll_clocks -create_base_clocks
+
+set SYS_CLK [get_clocks pll_inst|*clk*0*]
+if { [get_clocks -nowarn pll_inst|*clk*3*] != {} } {
+  set BUS_CLK [get_clocks pll_inst|*clk*3*]
+
+  # Extra cycle of margin for inter-domain transfers between SYS_CLK (200MHz)
+  # and BUS_CLK (100MHz). The extra cycle is in terms of the latching clock.
+  set_multicycle_path -from $SYS_CLK -to $BUS_CLK -setup 2
+  set_multicycle_path -from $SYS_CLK -to $BUS_CLK -hold  1
+  set_multicycle_path -from $BUS_CLK -to $SYS_CLK -setup 2
+  set_multicycle_path -from $BUS_CLK -to $SYS_CLK -hold  1
+
+  # mem_ahb_hreadyout may be received 1 cycle late by rv32.
+  set_multicycle_path -from $SYS_CLK -to rv32 -setup 2
+  set_multicycle_path -from $SYS_CLK -to rv32 -hold  1
+}
+
+set_false_path -from [get_pins rv32|sys_ctrl_stop]

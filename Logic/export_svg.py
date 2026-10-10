@@ -11,7 +11,7 @@ ser.reset_input_buffer()
 # Capture 1024 samples at 10 MSa/s (div=9)
 ser.write(bytes([0x80, 0x09, 0, 0, 0])) # 10 MSa/s
 words = 1024 // 4 - 1
-ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, 0, 0]))
+ser.write(bytes([0x81, words & 0xFF, (words >> 8) & 0xFF, words & 0xFF, (words >> 8) & 0xFF]))
 ser.write(bytes([0xC0, 0, 0, 0, 0])) # Immediate capture
 ser.reset_input_buffer()
 ser.write(b'\x01')

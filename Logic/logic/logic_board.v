@@ -126,7 +126,7 @@ defparam pll_inst.CLKFB_BYPASS    = 1'b0;
 defparam pll_inst.CLKDIV0_EN      = 1'b1;
 defparam pll_inst.CLKDIV1_EN      = 1'b1;
 defparam pll_inst.CLKDIV2_EN      = 1'b0;
-defparam pll_inst.CLKDIV3_EN      = 1'b0;
+defparam pll_inst.CLKDIV3_EN      = 1'b1;
 defparam pll_inst.CLKDIV4_EN      = 1'b0;
 defparam pll_inst.CLKOUT0_HIGH    = 8'd2;
 defparam pll_inst.CLKOUT0_LOW     = 8'd2;
@@ -146,8 +146,8 @@ defparam pll_inst.CLKOUT2_TRIM    = 1'b0;
 defparam pll_inst.CLKOUT2_BYPASS  = 1'b0;
 defparam pll_inst.CLKOUT2_DEL     = 8'd0;
 defparam pll_inst.CLKOUT2_PHASE   = 3'd0;
-defparam pll_inst.CLKOUT3_HIGH    = 8'd255;
-defparam pll_inst.CLKOUT3_LOW     = 8'd255;
+defparam pll_inst.CLKOUT3_HIGH    = 8'd5;
+defparam pll_inst.CLKOUT3_LOW     = 8'd5;
 defparam pll_inst.CLKOUT3_TRIM    = 1'b0;
 defparam pll_inst.CLKOUT3_BYPASS  = 1'b0;
 defparam pll_inst.CLKOUT3_DEL     = 8'd0;
@@ -181,7 +181,7 @@ defparam pll_inst.clk1_phase_shift        = "0";
 defparam pll_inst.clk2_divide_by          = 72;
 defparam pll_inst.clk2_multiply_by        = 288;
 defparam pll_inst.clk2_phase_shift        = "0";
-defparam pll_inst.clk3_divide_by          = 72;
+defparam pll_inst.clk3_divide_by          = 144;
 defparam pll_inst.clk3_multiply_by        = 288;
 defparam pll_inst.clk3_phase_shift        = "0";
 defparam pll_inst.clk4_divide_by          = 72;
@@ -199,7 +199,7 @@ defparam pll_inst.port_locked             = "PORT_USED";
 defparam pll_inst.port_clk0               = "PORT_USED";
 defparam pll_inst.port_clk1               = "PORT_USED";
 defparam pll_inst.port_clk2               = "PORT_UNUSED";
-defparam pll_inst.port_clk3               = "PORT_UNUSED";
+defparam pll_inst.port_clk3               = "PORT_USED";
 defparam pll_inst.port_clk4               = "PORT_UNUSED";
 defparam pll_inst.width_clock             = 5;
 defparam pll_inst.width_phasecounterselect = 3;
@@ -227,7 +227,27 @@ cycloneive_clkctrl #(
 );
 `endif
 
-assign bus_clk = sys_gck;
+`ifdef ALTA_SYN
+alta_gclkgen \PLL_CLKOUT[3]_gclkgen (
+  .clkin(PLL_CLKOUT[3]),
+  .ena(1'b1),
+  .clkout(bus_clk_gclkgen)
+);
+alta_io_gclk \bus_clk_gclk (
+  .inclk(bus_clk_gclkgen),
+  .outclk(bus_clk)
+);
+`else
+cycloneive_clkctrl #(
+  .clock_type       ("Global Clock"),
+  .ena_register_mode("falling edge")
+) \bus_clk_gclk (
+  .clkselect(2'b00),
+  .ena(1'b1),
+  .inclk({3'b0, PLL_CLKOUT[3]}),
+  .outclk(bus_clk)
+);
+`endif
 
 // Location: BBOX_X22_Y4_N0 FIXED_COORD
 alta_gclksw gclksw_inst (

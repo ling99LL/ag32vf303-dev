@@ -50,7 +50,7 @@ pio 建议加进 PATH，或者直接用 `%USERPROFILE%\.platformio\penv\Scripts\
 逻辑分析仪和 FOC 板的固件就是常规 upload：
 
 ```bash
-cd Logic  && pio run -e logic_board -t upload
+cd Logic  && pio run -e logic_analyzer -t upload
 cd FOC2205 && pio run -e foc2205    -t upload
 ```
 
@@ -67,7 +67,7 @@ pio run -e cpldled -t logic        # 烧位流
 pio run -e cpldled -t upload       # 烧最小 MCU 镜像
 ```
 
-`run_quartus.tcl` / `run_supra.bat` 这两个包装脚本只在 flowled 工程里有。`FOC2205/logic/` 和 `Logic/logic/` 里只有原始的 `af_quartus.tcl` / `af_run.tcl`，得直接调 Quartus 和 Supra，完整命令见各自 README。
+`run_quartus.tcl` / `run_supra.bat` 这两个包装脚本在 flowled 和 `Logic/logic/` 里都有；只有 `FOC2205/logic/` 里是原始的 `af_quartus.tcl` / `af_run.tcl`，需直接调 Quartus 和 Supra（`quartus_sh -t af_quartus.tcl` → `af_cmd.bat -f af_run.tcl`），完整命令见各自 README。
 
 ## 踩过的坑
 

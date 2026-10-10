@@ -1,4 +1,4 @@
-﻿"""
+"""
 AG32-LA4 Interactive Command-Line Tool (Plan B: CPLD Hardware Sampler)
 Usage:
     python run_la.py                     # Default 1024 samples capture & ASCII display
@@ -55,14 +55,14 @@ def run_capture(args):
     ser.write(bytes([0x80, args.divider & 0xFF, (args.divider >> 8) & 0xFF, (args.divider >> 16) & 0xFF, 0]))
 
     # Sample count config (SUMP standard: 0x81 = CMD_CAPTURE_SIZE)
-    ser.write(bytes([0x81, param & 0xFF, (param >> 8) & 0xFF, 0, 0]))
+    ser.write(bytes([0x81, param & 0xFF, (param >> 8) & 0xFF, param & 0xFF, (param >> 8) & 0xFF]))
 
     # Flags config (SUMP_FLAGS: 0x82)
     ser.write(bytes([0x82, 0x00, 0, 0, 0]))
 
     # Trigger config
-    ser.write(bytes([0xC1, args.trigger_mask & 0x0F, 0, 0, 0]))
-    ser.write(bytes([0xC0, args.trigger_val & 0x0F, 0, 0, 0]))
+    ser.write(bytes([0xC0, args.trigger_mask & 0x0F, 0, 0, 0]))
+    ser.write(bytes([0xC1, args.trigger_val & 0x0F, 0, 0, 0]))
 
     print(f"Arming CPLD hardware capture: {count} samples, divider={args.divider}, trig_mask=0x{args.trigger_mask:X}...")
     ser.write(bytes([0x01]))
