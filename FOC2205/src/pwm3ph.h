@@ -1,8 +1,9 @@
 // pwm3ph.h — GPTIMER0 center-aligned three-phase PWM for DRV8316 3x mode
 //
-// 3x mode: only INHx is driven (PIN_7/8/9 -> INHA/B/C); INLx is tied to AVDD on
-// the board and the driver generates the complementary low side with its own
-// VGS-sensed dead time. MCU DTG stays 0.
+// 3x mode: only INHx is driven (PIN_7/8/9 -> INHA/B/C); INLA/B/C are shorted to
+// DRV_INL_ALL on the board and driven by GPIO2_2/PIN_28 (10k pulldown). The
+// driver generates the complementary low side with its own VGS-sensed dead
+// time. MCU DTG stays 0.
 // BRK input = nFAULT (active low, BKP=0): hardware brake kills the outputs with
 // zero software latency if the driver reports a fault.
 #ifndef PWM3PH_H
