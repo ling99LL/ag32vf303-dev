@@ -1,6 +1,6 @@
 # AG32 开发工作区说明（AGENTS.md）
 
-本工作区用于 AGM 遨格芯 AG32 系列芯片（RISC-V MCU + 2K LE CPLD 二合一）的开发与验证。工作区不是 git 仓库，各目录独立成工程。
+本工作区用于 AGM 遨格芯 AG32 系列芯片（RISC-V MCU + 2K LE CPLD 二合一）的开发与验证。工作区根目录是 git 仓库（分支随当前工程走，如 `foc2205`），各目录独立成工程。
 
 ## 权威文档（改动敏感区域前先读）
 
@@ -17,6 +17,8 @@
 | `projects/can_uart_test/` | CAN/UART 复用测试工程 |
 | `example/`、`example_logic_led/` | **AGM 官方参考例程（用户提供的原始资料，勿修改勿删除）**，LED 引脚与接口约定的出处 |
 | `foc/foc_knob/` | FOC 力反馈旋钮工程（带 host 上位机与 probe/reset 脚本） |
+| `FOC2205/` | AG32VF303KCU6(QFN32)+MT6701QT-STD+DRV8316C 三芯片 FOC 驱动板，2205 电机力反馈旋钮；**与 `foc/foc_knob` 零交叉的独立工程**，`foc2205.ve` + `logic/`(ADC×3 + SPI mode1 桥×2) |
+| `Logic/` | AG32VF303 4 通道逻辑分析仪（方案 B：CPLD 硬件采样），SUMP/OLS 协议直连 PulseView/Sigrok；`logic_board.ve` + USB CDC + 性能实测报告 |
 | `ref-smartknob/` | scottbez1/smartknob 参考源码副本（只读参考） |
 | `docs/` | 交接文档与官方 PDF 归档 |
 
@@ -30,6 +32,7 @@
   pio run -e cpldled -t prelogic   # 自定义逻辑：生成 logic/ 工程
   ```
 - 自定义 CPLD 逻辑三段式（logic_dir 流程下 **buildlogic 不产位流**）：`prelogic` → `logic/run_quartus.tcl`（Quartus 无头综合）→ `logic/run_supra.bat`（Supra 布局布线）→ `-t logic` + `-t upload`。
+  - **脚本名勘误**：`run_quartus.tcl`/`run_supra.bat` 包装脚本只存在于 `projects/ag32vf303_flowled/logic/`。`FOC2205/logic/` 与 `Logic/logic/` 只有原始 `af_quartus.tcl` / `af_run.tcl`，需直接调 Quartus 与 Supra（`quartus_sh -t af_quartus.tcl` → `af_cmd.bat -f af_run.tcl`），各工程完整命令见其自身 README。
 - OpenOCD 直读调试：`halt` 后用 `mem2array`+`echo`（`mdw` 在 openocd_cmd.bat 下可能静默），可 halt 后 `mww` 直接驱动 GPIO 验证硬件。
 
 ## 硬性规则（违反即失败）
@@ -47,5 +50,6 @@
 ## 环境现状（2026-09 验收）
 
 - MCU 流水灯与纯 CPLD 流水灯均已烧录验收；JTAG 采样/无串口调试技巧见 HANDOVER §3.5/§9.4。
+- `FOC2205/` 全链路构建实测通过（Quartus 综合 + Supra P&R + 位流校验），硬件实测细节见 `FOC2205/README.md`；`Logic/` 性能实测数据见 `Logic/PERFORMANCE_REPORT.md`。
 - SDK 来源：百度网盘 `pan.baidu.com/s/17bp-zAnsYRuVMRTSSVHN5A` 提取码 `12ej`；官方技术群 QQ 379254175。
 - 换 QFN32 自研板时：改 `logic_device = AGRV2KQ32` + 按 DAPLink 手册 p.12-13 重写 VE + 重烧 logic。
