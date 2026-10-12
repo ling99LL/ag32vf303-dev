@@ -15,7 +15,7 @@ module logic_board (
   PIN_HSI,
   PIN_OSC,
   PLL_CLKIN,
-  TEST_OUT,
+  SG_OUT,
   UART0_UARTRXD,
   UART0_UARTTXD,
   USB0_DM,
@@ -33,7 +33,7 @@ input         PIN_HSE;
 input         PIN_HSI;
 input         PIN_OSC;
 input         PLL_CLKIN;
-output        TEST_OUT;
+output        SG_OUT;
 input         UART0_UARTRXD;
 output        UART0_UARTTXD;
 inout         USB0_DM;
@@ -42,29 +42,29 @@ inout         USB0_DP;
 // PLL_CLKIN
 assign PIN_1_in = PLL_CLKIN;
 
-// GPIO4_1, GPIO4_1
-assign PIN_12_in = GPIO4_1;
-wire PIN_12_out_en;
-wire PIN_12_out_data;
-assign GPIO4_1 = PIN_12_out_en ? PIN_12_out_data : 1'bz;
-
-// GPIO4_2, GPIO4_2
-assign PIN_13_in = GPIO4_2;
+// GPIO4_3, GPIO4_3
+assign PIN_13_in = GPIO4_3;
 wire PIN_13_out_en;
 wire PIN_13_out_data;
-assign GPIO4_2 = PIN_13_out_en ? PIN_13_out_data : 1'bz;
-
-// GPIO4_3, GPIO4_3
-assign PIN_14_in = GPIO4_3;
-wire PIN_14_out_en;
-wire PIN_14_out_data;
-assign GPIO4_3 = PIN_14_out_en ? PIN_14_out_data : 1'bz;
+assign GPIO4_3 = PIN_13_out_en ? PIN_13_out_data : 1'bz;
 
 // GPIO4_4, GPIO4_4
-assign PIN_18_in = GPIO4_4;
+assign PIN_14_in = GPIO4_4;
+wire PIN_14_out_en;
+wire PIN_14_out_data;
+assign GPIO4_4 = PIN_14_out_en ? PIN_14_out_data : 1'bz;
+
+// GPIO4_2, GPIO4_2
+assign PIN_18_in = GPIO4_2;
 wire PIN_18_out_en;
 wire PIN_18_out_data;
-assign GPIO4_4 = PIN_18_out_en ? PIN_18_out_data : 1'bz;
+assign GPIO4_2 = PIN_18_out_en ? PIN_18_out_data : 1'bz;
+
+// GPIO4_1, GPIO4_1
+assign PIN_19_in = GPIO4_1;
+wire PIN_19_out_en;
+wire PIN_19_out_data;
+assign GPIO4_1 = PIN_19_out_en ? PIN_19_out_data : 1'bz;
 
 // UART0_UARTTXD, GPIO7_6
 wire PIN_20_out_en;
@@ -310,7 +310,7 @@ analog_ip macro_inst(
   .CH1_IN             (CH1_IN             ),
   .CH2_IN             (CH2_IN             ),
   .CH3_IN             (CH3_IN             ),
-  .TEST_OUT           (TEST_OUT           ),
+  .SG_OUT             (SG_OUT             ),
   .USB0_DM            (USB0_DM            ),
   .USB0_DP            (USB0_DP            ),
   .sys_clock          (sys_gck            ),
@@ -365,15 +365,15 @@ wire [7:0] gpio3_io_in = {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0};
 
 (* keep = 1 *) wire [7:0] gpio4_io_out_data;
 (* keep = 1 *) wire [7:0] gpio4_io_out_en;
-assign PIN_12_out_data = gpio4_io_out_data[1];
-assign PIN_12_out_en = gpio4_io_out_en[1];
-assign PIN_13_out_data = gpio4_io_out_data[2];
-assign PIN_13_out_en = gpio4_io_out_en[2];
-assign PIN_14_out_data = gpio4_io_out_data[3];
-assign PIN_14_out_en = gpio4_io_out_en[3];
-assign PIN_18_out_data = gpio4_io_out_data[4];
-assign PIN_18_out_en = gpio4_io_out_en[4];
-(* keep = 1 *) wire [7:0] gpio4_io_in = {1'b0, 1'b0, 1'b0, PIN_18_in, PIN_14_in, PIN_13_in, PIN_12_in, 1'b0};
+assign PIN_19_out_data = gpio4_io_out_data[1];
+assign PIN_19_out_en = gpio4_io_out_en[1];
+assign PIN_18_out_data = gpio4_io_out_data[2];
+assign PIN_18_out_en = gpio4_io_out_en[2];
+assign PIN_13_out_data = gpio4_io_out_data[3];
+assign PIN_13_out_en = gpio4_io_out_en[3];
+assign PIN_14_out_data = gpio4_io_out_data[4];
+assign PIN_14_out_en = gpio4_io_out_en[4];
+(* keep = 1 *) wire [7:0] gpio4_io_in = {1'b0, 1'b0, 1'b0, PIN_14_in, PIN_13_in, PIN_18_in, PIN_19_in, 1'b0};
 
 wire [7:0] gpio5_io_out_data;
 wire [7:0] gpio5_io_out_en;

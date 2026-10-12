@@ -1,0 +1,20 @@
+DAC0 硬宏修复证据（2026-10-12 夜）
+============================================================
+背景: dac_dout 悬空 -> Quartus 把 alta_dac 当死逻辑整条删除
+      -> PIN_11 静默无输出 + Supra 丢弃 FIXED_COORD 坐标绑定。
+修复: (1) analog_ip.v 给 dac_dout 挂 preserve keep-guard 寄存器 (dac_dout_seen);
+      (2) run_quartus_steps.bat 第 1 步跑 af_ip.tcl 生成 alta_auto 宏分区,
+          并加两道护栏（qsf 缺分区行 / 网表缺 alta_dac 均报错拒出流）。
+
+1) 综合网表 simulation/modelsim/logic_board.vo 含实例:
+   alta_dac \macro_inst|gen_per[3].gen_dac.dac_inst|dac_inst (
+2) af_ip.tcl 写入 logic_board.qsf 的宏分区 (tag alta_auto, 节选):
+   set_instance_assignment -name PARTITION_HIERARCHY macro_inst_gen_per_3__gen_dac_dac_inst_dac_inst
+     -to "analog_ip:macro_inst|apb_dac:gen_per[3].gen_dac.dac_inst|alta_dac:dac_inst" -section_id ... -tag alta_auto
+   （af_ip.tcl 机制：先删全部 alta_auto 行，再扫 map 后层级重建 —— 有分区行即证明宏存活过综合）
+3) logic_board.asf 用户段 FIXED_COORD 绑定 (af_run.tcl 启动时 source):
+   set_instance_assignment -extension -name FIXED_COORD -to macro_inst|gen_per[3].*gen_dac.dac_inst|dac_inst {22 11}
+4) af.exe 放置转储 (dump_place_info) 证明实际落位:
+   "macro_inst|gen_per[3].gen_dac.dac_inst|dac_inst" 22 11 0    <- PIN_11 坐标
+5) 板上回环实测 (PIN_10 <-> PIN_11 跳线, tools/loopback_test.py): 18/18 PASS
+   日志: tools/loopback_test_log_2026-10-12_final.txt

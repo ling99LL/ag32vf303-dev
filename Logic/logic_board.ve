@@ -12,17 +12,24 @@ USB0_DP PIN_23
 UART0_UARTTXD PIN_20
 UART0_UARTRXD PIN_21
 
-# Status LEDs on QFN32:
-GPIO4_1 PIN_12 # LED1 (Power / Ready)
-GPIO4_2 PIN_13 # LED2 (Armed / Waiting trigger)
-GPIO4_3 PIN_14 # LED3 (Capturing)
-GPIO4_4 PIN_18 # LED4 (Transmitting Data)
+# Status LEDs on QFN32 (active-low):
+GPIO4_1 PIN_19 # LED1 (Power / Ready)
+GPIO4_2 PIN_18 # LED2 (Armed / Waiting trigger)
+GPIO4_3 PIN_13 # LED3 (Capturing)
+GPIO4_4 PIN_14 # LED4 (Transmitting Data)
 
-# Logic Analyzer 4 Channels Input (Direct to CPLD fabric)
+# Logic Analyzer Inputs: board CH1..CH4 = PIN_7..PIN_10 (firmware sampler CH0_IN..CH3_IN = bit0..bit3)
 CH0_IN PIN_7:INPUT
 CH1_IN PIN_8:INPUT
 CH2_IN PIN_9:INPUT
 CH3_IN PIN_10:INPUT
 
-# Built-in Hardware Test Pattern Output
-TEST_OUT PIN_11:OUTPUT
+# Signal Generator / Trigger outputs
+#   PIN_5 : digital output. Source is muxed inside the CPLD (P5_CFG[8]):
+#             1 = digital square-wave generator, f = 100MHz/(div+1) = 1Hz..100MHz
+#             0 = trigger/pulse engine (delay -> level/pulse, host triggered)
+#   PIN_11: DAC0 analog output (sine / square / sawtooth / triangle via MCU DMA
+#           wave table). The DAC0 hard macro is bound to pad PIN_11 by the
+#           FIXED_COORD assignment in logic/logic_board.asf -- do NOT add a
+#           digital pin assignment for PIN_11 here.
+SG_OUT   PIN_5:OUTPUT

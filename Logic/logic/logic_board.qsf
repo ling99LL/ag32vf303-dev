@@ -22,6 +22,7 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "09:37:04  JANUARY 04, 20
 set_global_assignment -name LAST_QUARTUS_VERSION "13.0 SP1"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY "./quartus_logs"
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name PARALLEL_SYNTHESIS OFF
 set_global_assignment -name FLOW_ENABLE_IO_ASSIGNMENT_ANALYSIS ON
 #set_global_assignment -name SMART_RECOMPILE ON
 
@@ -658,6 +659,11 @@ set_location_assignment -to resetn_out            LCCOMB_X58_Y5_N6
 set_instance_assignment -name GLOBAL_SIGNAL GLOBAL_CLOCK -to sys_resetn
 set_global_assignment -name VERILOG_FILE ahb2apb.v
 set_global_assignment -name EDA_MAINTAIN_DESIGN_HIERARCHY PARTITION_ONLY -section_id eda_simulation
+
+set_global_assignment -name PARTITION_COLOR 52377 -section_id macro_inst_gen_per_3__gen_dac_dac_inst_dac_inst -tag alta_auto
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id macro_inst_gen_per_3__gen_dac_dac_inst_dac_inst -tag alta_auto
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id macro_inst_gen_per_3__gen_dac_dac_inst_dac_inst -tag alta_auto
+set_instance_assignment -name PARTITION_HIERARCHY macro_inst_gen_per_3__gen_dac_dac_inst_dac_inst -to "analog_ip:macro_inst|apb_dac:gen_per[3].gen_dac.dac_inst|alta_dac:dac_inst" -section_id macro_inst_gen_per_3__gen_dac_dac_inst_dac_inst -tag alta_auto
 set_global_assignment -name PARTITION_COLOR 52377 -section_id rv32 -tag alta_auto
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id rv32 -tag alta_auto
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id rv32 -tag alta_auto

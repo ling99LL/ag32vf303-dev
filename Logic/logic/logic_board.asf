@@ -11,3 +11,11 @@ if { [info exists USB0_MODE] } {
 }
 # pio_end    <<<<<< DO NOT MODIFY THIS SECTION! <<<<<<
 
+# ---------------------------------------------------------------------------
+# User design extensions (preserved by prelogic; sourced by af_run.tcl).
+# Bind the DAC0 hard macro to its fixed silicon location so that the apb_dac
+# instance inside analog_ip.v drives pad PIN_11 (QFN32 package).
+#   {22 11} = DAC0 -> PIN_11, {22 12} = DAC1 -> PIN_12 (not routed on this board).
+# ---------------------------------------------------------------------------
+set_instance_assignment -extension -name FIXED_COORD -to macro_inst|gen_per[3].*gen_dac.dac_inst|dac_inst {22 11}
+
