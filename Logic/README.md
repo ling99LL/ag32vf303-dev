@@ -7,6 +7,13 @@
 
 > **2026-10-10 修订**：采样率基准修正为 100MHz/(div+1)（最高 100 MSa/s，分频寄存器已扩到 16 位）；环形预触发缓冲为真实硬件实现（含 REG_TRIG_POS 触发点定位与 per-cycle 触发锁存）；采样引擎运行在独立 100MHz 总线时钟域（时序收敛，见 Supra 报告 Fmax 119.8MHz/+1.65ns）。实测复验：`live_hardware_test.py` 100% PASS（8 档速率绝对时基校验）。
 
+> **2026-10-12 修订（板载信号发生器上线 + DAC 硬宏修复 + 板级回环验证）**：
+> ① 信号发生器：**PIN_11 = DAC0 任意波形**（正弦/方波/锯齿/三角，MCU DMA 循环播表，输出上限 5 MSa/s 见 §9）；**PIN_5 = 数字方波 1 Hz~100 MHz 或延时触发/脉冲引擎**（二选一）；上位机 `tools/run_wavegen.bat`；SUMP 扩展命令 `0x84`~`0x8D`（协议见 §9.3）。**注意：逻辑分析仪采样率不受影响，仍为 100 MSa/s。**
+> ② **`alta_dac` 硬宏宕机修复**：`dac_dout` 悬空曾被 Quartus 当死逻辑整条删除（PIN_11 静默无输出、Supra FIXED_COORD 绑定失效）。现有三重保护——`analog_ip.v` keep-guard 寄存器、构建脚本第 1 步 `af_ip.tcl` 宏分区、两道自动护栏（qsf 缺分区 / 网表缺 `alta_dac` 均报错拒绝出流），**勿删**。
+> ③ **DAC 定速标定**：波表重复填满整个 2048 点 DMA 缓冲（消除小波表 LLI 重载抢走请求时隙导致的频率减半/偏低）；采样率上限默认 **5 MSa/s**（AHB→APB 每样本约 16 总线周期握手，>5 MSa/s 会丢拍失准；`0x8B` 仍可调）。
+> ④ **上板实测**：冒烟 `tools/smoke_test.py` **19/19**、板级回环 `tools/loopback_test.py`（PIN_10↔PIN_11 跳线，DAC 全波形）**18/18**；位流 22368B + 固件 24768B 均 DAPLink OpenOCD 写入并 verify（详见 [HANDOVER.md](HANDOVER.md)）。
+> ⑤ 维护提示：Supra P&R 非确定性（同一输入两次构建位流字节不同、均 0 errors，功能等价）——**位流哈希不可用于判等**，验收以板上实测为准。
+
 > **详细性能实测与协议分析**: 请参阅完整的 [【AG32VF303 4通道逻辑分析仪性能深度评估报告】](PERFORMANCE_REPORT.md)。
 
 ## 1. 方案 B 核心优势 (CPLD 硬件采样 vs MCU 软件轮询)

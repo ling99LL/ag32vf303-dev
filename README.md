@@ -6,7 +6,7 @@ AGM（遨格芯）AG32 系列把 RISC-V MCU 和 2K LE 的 CPLD 做进同一颗�
 
 ## 工程
 
-- **`Logic/`** — 4 通道逻辑分析仪。CPLD 纯硬件同步采样，硬件触发加预触发，样本进 Block RAM，MCU 经总线读出来走 USB CDC。协议是 SUMP，PulseView 直接连。实测指标和协议分析见 [Logic/PERFORMANCE_REPORT.md](Logic/PERFORMANCE_REPORT.md)。
+- **`Logic/`** — 4 通道逻辑分析仪。CPLD 纯硬件同步采样，硬件触发加预触发，样本进 Block RAM，MCU 经总线读出来走 USB CDC。协议是 SUMP，PulseView 直接连。板载信号发生器：PIN_11 DAC 任意波形（正弦/方波/锯齿/三角）+ PIN_5 数字方波 1 Hz~100 MHz / 延时触发引擎，上位机 `Logic/tools/run_wavegen.bat`（见 [Logic/README.md](Logic/README.md) §9）。实测指标和协议分析见 [Logic/PERFORMANCE_REPORT.md](Logic/PERFORMANCE_REPORT.md)。
 - **`FOC2205/`** — 三相 FOC 驱动板，2205 无刷电机的力反馈旋钮。MT6701QT 磁编码器（SSI）+ DRV8316C（3x PWM，SPI 配置）+ 三电阻电流采样，GPTIMER0 中心对齐 20kHz 控制环。和 `foc/foc_knob` 完全独立，不共用任何文件。
 - **`projects/ag32vf303_flowled/`** — 流水灯验证工程。MCU 软件版（`-e flow`）和纯 CPLD 版（`-e cpldled`）各一个，platformio.ini 可以当配置范本。
 - **`projects/can_uart_test/`** — CAN 与 UART 的引脚复用、回环测试。
@@ -67,11 +67,13 @@ pio run -e cpldled -t logic        # 烧位流
 pio run -e cpldled -t upload       # 烧最小 MCU 镜像
 ```
 
-`run_quartus.tcl` / `run_supra.bat` 这两个包装脚本在 flowled 和 `Logic/logic/` 里都有；只有 `FOC2205/logic/` 里是原始的 `af_quartus.tcl` / `af_run.tcl`，需直接调 Quartus 和 Supra（`quartus_sh -t af_quartus.tcl` → `af_cmd.bat -f af_run.tcl`），完整命令见各自 README。
+`run_quartus.tcl` / `run_supra.bat` 这两个包装脚本在 flowled 和 `Logic/logic/` 里都有；只有 `FOC2205/logic/` 里是原始的 `af_quartus.tcl` / `af_run.tcl`，需直接调 Quartus 和 Supra（`quartus_sh -t af_quartus.tcl` → `af_cmd.bat -f af_run.tcl`），完整命令见各自 README。**⚠️ `Logic/` 请改用 `logic/run_quartus_steps.bat`**——本机 Quartus fast-fail 下 `run_quartus.tcl` 一键流程必误报中止，且 Logic 依赖 `af_ip.tcl` 宏分区保护 DAC 硬宏（详见 [Logic/README.md](Logic/README.md) §6）。
 
 ## 踩过的坑
 
 - `logic_device` 要和封装对上。100 脚 Demo 板用默认的 AGRV2KL100（不写就行），QFN-32 必须显式写 `logic_device = AGRV2KQ32`。
+- **Quartus 一键流程（`run_quartus.tcl` / execute_flow）在本机必失败**：Quartus 13 各工具收尾 fast-fail（退出码 `0xC0000409`），流程误报 `Error 293007` 中止，与设计源码无关；所有工程改用分步脚本（参考 `Logic/logic/run_quartus_steps.bat`，以各步 summary 报告校验）。
+- **含硬宏的设计不能跳过 `af_ip.tcl` 宏分区**：缺 `alta_auto` 分区会让 `alta_dac`/`alta_adc` 等硬宏被 Quartus 当死逻辑删除（2026-10-12 实例：Logic 的 PIN_11 DAC 静默失效）——分步脚本必须保留 `quartus_sh -t af_ip.tcl` 这一步。
 - **logic 必须先烧，否则 MCU 调不通。** JTAG 调试脚同样走 CPLD 路由，logic 为空时 `reset run` 会卡 ROM，PC 停在 0x0001xxxx 附近。
 - 位流地址有坑：压缩位流在 0x80034000，未压缩在 0x80027000，选项字节记着 ROM 加载地址，而 `-t logic` 不更新选项字节。格式或地址和之前不一致就会卡 ROM。工程统一 `logic_compress = true`。
 - 改了 `.ve` 就得重跑逻辑生成并重烧位流；只改 C 代码的话 `upload` 就够了。

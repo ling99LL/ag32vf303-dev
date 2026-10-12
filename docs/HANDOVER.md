@@ -7,6 +7,8 @@
 > 工作区：`C:\Users\Administrator\Documents\AG32`
 >
 > **✅ 验收已完成：4 路 LED 流水灯已烧录并在板上运行**（`pio run -e flow -t upload` 即可复现）
+>
+> **2026-10-12 更新**：§5 / §9.3 修正两条（① Quartus 一键流程在本机必 fast-fail 误报，改用分步脚本；② af_ip.tcl 宏分区对含硬宏设计**并非可选**，删了会丢硬宏）——详见 §9.3 修正块。
 
 ---
 
@@ -171,6 +173,8 @@ UART1_UARTTXD txd_chn     # MCU功能 → CPLD内部信号
 | 找不到 CMSIS-DAP | DAPLink 进了 Blaster 模式（J4 连通）或被占用；拔插 USB |
 | COM26 打不开 | 串口号随 USB 口漂移，设备管理器确认后更新 platformio.ini |
 | 烧完没反应 | 先确认两个 bin 都烧了（logic + 程序）；BOOT0 电平 |
+| Quartus 报 `Error 293007 / ended unexpectedly` | 本机 Quartus 13 fast-fail 环境问题（非设计错误、与源码无关）：勿用 `run_quartus.tcl` 一键流程，改用分步脚本并以各步 summary 报告校验（参考 `Logic/logic/run_quartus_steps.bat`，见 §9.3 修正） |
+| Logic 的 PIN_11 无模拟输出 / `alta_dac` 未见报错但失效 | 硬宏被综合当死逻辑删除：检查 `logic_board.qsf` 是否有 `alta_auto` 分区行、网表 `.vo` 是否含 `alta_dac`（构建脚本已内置两道护栏，见 §9.3 修正） |
 | 中文路径报错 | SDK/PIO 不支持中文路径 |
 
 ---
@@ -251,7 +255,11 @@ $PIO run -e cpldled -t logic         # ④ 烧位流（0x80034000）
 $PIO run -e cpldled -t upload        # ⑤ 烧最小 MCU 宿主
 ```
 
-`run_quartus.tcl`/`run_supra.bat` 是本工程自带的无头编译脚本（见下）。**不推荐 GUI 手动跑**：官方 af_quartus.tcl 里的 af_ip.tcl（分区提示脚本）在无头模式会因未打开工程而报错，但那些 assignment 只是优化提示、非功能必需，故 run_quartus.tcl 绕过了它。
+`run_quartus.tcl`/`run_supra.bat` 是本工程自带的无头编译脚本（见下）。
+
+> ⚠️ **2026-10-12 修正（两条，勿再沿用旧说法）**：
+> 1. 旧注记称 "af_ip.tcl 的 assignment 只是优化提示、非功能必需"——**该结论错误**。对含硬宏的设计（如 `Logic/` 的 `alta_dac`/`alta_adc`），缺 `alta_auto` 宏分区会让硬宏被 Quartus 当**死逻辑整条删除**（实例：Logic 的 PIN_11 模拟输出静默失效）。`Logic/logic/run_quartus_steps.bat` 已把 `quartus_sh -t af_ip.tcl` 固定为第 1 步并加两道护栏。flowled 无硬宏、绕过暂无副作用，但不要套用到其它工程。
+> 2. 本机 Quartus II 13 所有 CLI 工具收尾会 fast-fail（退出码 `0xC0000409`），`execute_flow` 一键流程（即 `run_quartus.tcl`）必然在 map 后误报 `Error 293007` 中止——**本机所有工程**均受影响，改用分步执行并以各步 summary 报告校验（参考 `Logic/logic/run_quartus_steps.bat`；详见 `Logic/HANDOVER.md`）。
 
 ```tcl
 # logic/run_quartus.tcl（已存在）
