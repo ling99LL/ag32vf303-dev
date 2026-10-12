@@ -19,7 +19,7 @@
 | **硬件触发捕获** | 软件轮询匹配，存在首点延迟 | **CPLD 硬件边沿/电平无延迟硬件触发** |
 | **数据缓冲机制** | MCU SRAM 软件循环写入 | **CPLD 双口 Block RAM (M9K 块) 硬件打包** |
 | **总线读取与传输** | CPU 直接读 GPIO 寄存器 | **MCU 经 AHB/APB 总线直接读取 CPLD BRAM** |
-| **自测方波发生器** | MCU GPIO 翻转 | **CPLD 独立硬件分频方波发生器 (PIN_11)** |
+| **自测方波发生器** | MCU GPIO 翻转 | **CPLD 独立硬件分频方波发生器 (PIN_5，1 Hz~100 MHz) + PIN_11 DAC 模拟波形发生器** |
 
 ---
 
@@ -30,17 +30,20 @@
 | 通道 / 功能 | 芯片物理管脚 | VE 绑定网络 | 内部接口映射 | 信号电气方向与用途 |
 |---|---|---|---|---|
 | **CLK_50M (主时钟)** | **第 1 脚** | PIN_1 | PLL_CLKIN | **输入** (板载 50MHz 高精度有源晶振，作为系统 200MHz PLL 参考基准) |
-| **CH0 (通道 0)** | **第 7 脚** | PIN_7 | CH0_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH0) |
-| **CH1 (通道 1)** | **第 8 脚** | PIN_8 | CH1_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH1) |
-| **CH2 (通道 2)** | **第 9 脚** | PIN_9 | CH2_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH2) |
-| **CH3 (通道 3)** | **第 10 脚** | PIN_10 | CH3_IN (CPLD) | **输入** (直通 CPLD 硬件采样核 CH3，跳线接 PIN_11) |
-| **TEST_OUT** | **第 11 脚** | PIN_11 | TEST_OUT (CPLD) | **输出** (CPLD 内部硬件 100kHz 方波发生器，供自测) |
-| **LED1 (Ready)** | **第 12 脚** | PIN_12 | GPIO4_1 | **输出** (低电平点亮，自检/Ready 常亮/待机心跳) |
-| **LED2 (Armed)** | **第 13 脚** | PIN_13 | GPIO4_2 | **输出** (低电平点亮，等待硬件触发中) |
-| **LED3 (Capturing)**| **第 14 脚** | PIN_14 | GPIO4_3 | **输出** (低电平点亮，CPLD 硬件采样中) |
-| **LED4 (Uploading)**| **第 18 脚** | PIN_18 | GPIO4_4 | **输出** (低电平点亮，USB CDC 上传数据中) |
+| **CH1 (通道 1)** | **第 7 脚** | PIN_7 | CH0_IN (CPLD, bit0) | **输入** (直通 CPLD 硬件采样核) |
+| **CH2 (通道 2)** | **第 8 脚** | PIN_8 | CH1_IN (CPLD, bit1) | **输入** (直通 CPLD 硬件采样核) |
+| **CH3 (通道 3)** | **第 9 脚** | PIN_9 | CH2_IN (CPLD, bit2) | **输入** (直通 CPLD 硬件采样核) |
+| **CH4 (通道 4)** | **第 10 脚** | PIN_10 | CH3_IN (CPLD, bit3) | **输入** (直通 CPLD 硬件采样核，自测回环目标) |
+| **PIN_11 (模拟波形输出 A)** | **第 11 脚** | PIN_11 | DAC0 (芯片模拟硬核) | **输出** (10bit DAC 模拟波形：正弦/方波/锯齿/三角，MCU DMA 循环播表；由 `logic_board.asf` 的 FIXED_COORD `{22 11}` 绑定，非数字引脚) |
+| **PIN_5 (数字输出 B)** | **第 5 脚** | PIN_5 | SG_OUT (CPLD) | **输出** (CPLD 内部二选一：①数字方波 1 Hz~100 MHz（自测/时钟源）②延时触发/脉冲引擎（延时高/低电平、脉冲、上位机触发）) |
+| **LED1 (Ready)** | **第 19 脚** | PIN_19 | GPIO4_1 | **输出** (低电平点亮，自检/Ready 常亮/待机心跳) |
+| **LED2 (Armed)** | **第 18 脚** | PIN_18 | GPIO4_2 | **输出** (低电平点亮，等待硬件触发中) |
+| **LED3 (Capturing)**| **第 13 脚** | PIN_13 | GPIO4_3 | **输出** (低电平点亮，CPLD 硬件采样中) |
+| **LED4 (Uploading)**| **第 14 脚** | PIN_14 | GPIO4_4 | **输出** (低电平点亮，USB CDC 上传数据中) |
 | **USB D- / D+** | **第 22 / 23 脚** | PIN_22 / 23 | USB0 | 原生 USB 2.0 Full-Speed CDC 虚拟串口 (COM33) |
 | **UART0 TX / RX** | **第 20 / 21 脚** | PIN_20 / 21 | UART0 | 调试/备用控制串口 (COM26) |
+
+> 编号说明：固件源码与 SUMP 协议沿用 **CH0~CH3**（采样位 bit0~bit3）索引，与板级编号 **CH1~CH4** 一一对应（CH1/CH0 = PIN_7，CH2/CH1 = PIN_8，CH3/CH2 = PIN_9，CH4/CH3 = PIN_10）。
 
 ---
 
@@ -53,9 +56,18 @@ MCU 通过内部高带宽 AHB 经 `ahb2apb` 桥访问 CPLD 内部逻辑寄存器
 | `0x60000000` | **REG_CTRL** | R/W | `[0]`: ARM 启动采样<br>`[2]`: FORCE 强制触发<br>`[3]`: TEST_EN 方波使能<br>`[7:4]`: 4通道触发掩码 (TRIG_MASK)<br>`[11:8]`: 4通道触发期望值 (TRIG_VAL)<br>`[23:16]`: 采样时钟分频系数 (SAMPLE_CLK_DIV) |
 | `0x60000004` | **REG_STATUS** | R | `[0]`: BUSY 正在采样<br>`[1]`: DONE 采样完成<br>`[2]`: TRIGGERED 已捕获触发<br>`[31:16]`: 已捕获 32-bit 字数 (WORD_COUNT) |
 | `0x60000008` | **REG_DEPTH** | R/W | `[15:0]`: 目标采样深度字数 (最大 1024 字 = 8192 采样点) |
-| `0x6000000C` | **REG_TEST_DIV** | R/W | `[15:0]`: 自测方波分频初值 (默认 999 对应 100 kHz) |
+| `0x6000000C` | **REG_SQ_DIV** | R/W | PIN_5 方波频率：`[15:0]`=A，`[31:16]`=B；f = 100 MHz / ((A+1)×(B+1))（A=999,B=0 → 100 kHz；A=0,B=0 → 100 MHz，覆盖 1 Hz~100 MHz） |
 | `0x60000010` | **REG_ID** | R | 只读魔数：`0x4C413332` (ASCII: `"LA32"`)，用于固件探测 CPLD 存在性 |
+| `0x60000014` | **REG_TRIG_POS** | R | `[25:16]`: 触发字索引（环形预触发缓存用） |
+| `0x60000018` | **REG_POST_WORDS** | R/W | `[15:0]`: 触发后采样的字数 |
+| `0x60000020` | **REG_P5_CFG** | R/W | `[1:0]`: 模式 (0=延时→电平 1=延时→脉冲 2=主机→电平 3=主机→脉冲)<br>`[2]`: 输出有效电平 `[3]`: 空闲电平 `[5:4]`: 时基倍率 (10ns×1/10/100/1000) `[8]`: 方波/引擎选择 |
+| `0x60000024` | **REG_P5_DELAY** | R/W | `[31:0]`: 延时（tick 数，tick = 10 ns × 时基倍率） |
+| `0x60000028` | **REG_P5_WIDTH** | R/W | `[31:0]`: 脉冲宽度（tick 数） |
+| `0x6000002C` | **REG_P5_CTRL** | R/W | 写：`[0]`: 布防(arm) `[1]`: 立即触发(fire) `[2]`: 复位(clear)<br>读：`[0]`: BUSY `[1]`: DONE `[2]`: 当前输出电平 |
+| `0x60000030` | **REG_P5_REMAIN** | R | `[31:0]`: 触发引擎剩余 tick（用于上位机倒计时显示） |
 | `0x60001000` ~ `0x60001FFF` | **RAM_BUFFER** | R | **CPLD 双口 Block RAM 采样区** (1024 个 32-bit 字，每字含 8 个 4-bit 采样点) |
+| `0x60003000` | **DAC0_CTRL** | R/W | `[0]`: EN `[1]`: 输出缓冲 `[2]`: DMA 使能 `[31:16]`: 采样率分频 (rate = 100 MHz/(DIV+1)) |
+| `0x60003004` | **DAC0_DATA** | R/W | `[9:0]`: DAC 采样码（DMA 每次请求写入一个样本） |
 
 ---
 
@@ -133,17 +145,20 @@ Depth (Samples)    | Upload Time (ms) | Effective Bandwidth
 
 ## 6. 自定义 CPLD 逻辑编译与烧录流程 (三段式)
 
-修改 `logic/analog_ip.v` 后的三段式编译与烧录方法：
+修改 `logic_board.ve` / `logic/analog_ip.v` 后的三段式编译与烧录方法：
 
 ```powershell
 cd C:\Users\Administrator\Documents\AG32\Logic
 
+# 0. 若改了 .ve：先重新生成 logic 工程
+C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t prelogic
+
 # 1. Quartus 综合 (Cyclone IV E 代理目标)
 cd logic
-C:\altera\13.0sp1\quartus\bin64\quartus_sh.exe -t run_quartus.tcl
+run_quartus_steps.bat
 
 # 2. Supra 布局布线与位流压缩
-cmd.exe /c run_supra.bat
+run_supra.bat
 cd ..
 
 # 3. 烧录 CPLD 位流到 Flash (0x80034000)
@@ -153,6 +168,10 @@ C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t
 C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t upload
 ```
 
+> **Quartus 环境问题（2026-10-12 排查）**：本机 Quartus II 13 各工具会"完整完成工作并写出 Successful 报告，但进程以 `0xC0000409`（Windows fast-fail）退出"，stdout 缓冲丢失造成日志"中途截断"假象；`run_quartus.tcl`（execute_flow 一键流程）因此误报 `Error 293007` 中止。请改用 `run_quartus_steps.bat`——分步执行同一流程（**af_ip.tcl 宏分区扫描** → map → cdb merge → fit --check_ios → fit → sta → eda）并以各步 `quartus_logs\*.summary` 报告校验。此问题与设计源码无关（已用改动前配置对照复现），详细排查见 `HANDOVER.md`。
+>
+> **脚本自带两道 DAC 宏护栏（2026-10-12 加，勿删）**：第 1 步的 `quartus_sh -t af_ip.tcl` 为 `alta_dac` 等硬宏生成 `alta_auto` 宏分区（锁定层级，防止被 Quartus 当死逻辑删除）；收尾校验网表 `simulation/modelsim/logic_board.vo` 确实含 `alta_dac`，缺失则直接报错拒绝放行。背景：`dac_dout` 悬空曾导致 DAC 硬宏被整条删除，PIN_11 静默无输出且 Supra 的 `FIXED_COORD` 绑定失效（修复见 `logic/analog_ip.v` 的 keep-guard 注释）。
+
 ---
 
 ## 7. 脚本工具列表
@@ -161,6 +180,8 @@ C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t
 - `test_la.py`: 完整的自动化硬件单元测试套件（测试 ID、元数据、各采样深度以及 CH3 方波翻转）。
 - `verify_performance.py`: 传输吞吐率与触发延迟性能分析评估工具。
 - `capture_and_visualize.py`: 单次捕获并打印控制台 ASCII 实时波形及生成 VCD 波形文件。
+- `tools/run_wavegen.bat` + `tools/wavegen_gui.py`: **波形发生器上位机**（Tkinter GUI）。控制 PIN_11 模拟波形（正弦/方波/锯齿/三角、频率、幅度、输出开关）、PIN_5 数字方波及触发/脉冲引擎（延时高/低电平、脉冲、上位机触发、倒计时状态回读）。双击 `tools/run_wavegen.bat` 启动（使用系统 Python 3.11，自带 tkinter/pyserial，无需安装）。
+- `tools/smoke_test.py`: **上板冒烟测试**（烧录后回归，可无跳线运行）。覆盖：通信握手与固件版本、CPLD 8192 点捕获、通道跳线活动扫描、PIN_5 方波频率校验（SUMP 0x83）、PIN_11 DAC 四波形开关与频率校验、P5 触发/脉冲引擎时序（寄存器级）、脉冲全波形捕获（需跳线）。运行：`python tools/smoke_test.py COM33`。
 ---
 
 ## 8. 无人值守优化与稳定性增强 (Unattended Operation)
@@ -168,7 +189,7 @@ C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t
 针对长期无人值守运行（Long-term Unattended / Continuous Stress），固件在以下方面进行了专门优化：
 
 1. **防死锁与非阻塞 USB CDC 调度**：
-   - 在等待硬件触发与采样过程中，实时交替执行 	ud_task() 维持 TinyUSB CDC 协议栈心跳。
+   - 在等待硬件触发与采样过程中，实时交替执行 tud_task() 维持 TinyUSB CDC 协议栈心跳。
    - 增加 **1500 ms 触发超时硬件自愈**：若外部信号迟迟未触发，自动触发完成当次采样并退出，杜绝 USB 通信死锁。
 2. **实时中止响应 (PulseView Abort)**：
    - 采样等待循环中内建串口窥探检测，一旦上位机发送 SUMP_RESET (0x00)，立即对 CPLD 取消 ARM 并回退至 IDLE 状态，支持连续点击停止/重开。
@@ -179,9 +200,9 @@ C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t
    - 经实测通过 50 次连续密集捕获压测，成功率 100%，USB CDC 有效吞吐率达到 **~925 KB/s**。
 5. **CPLD 硬件边沿触发引擎 (Hardware Edge-Trigger)**：
    - 在 logic/analog_ip.v 中引入专用上一周期采样快照寄存器 ch_prev，支持纯门级无毛刺上升沿 (ch_rising) 与下降沿 (ch_falling) 极速边沿捕获，响应延迟为 0 周期。
-   - REG_CTRL 扩展第 12 位 	rig_edge_en，无缝衔接 PulseView 多阶段边沿与电平复合触发模式。
+   - REG_CTRL 扩展第 12 位 trig_edge_en，无缝衔接 PulseView 多阶段边沿与电平复合触发模式。
 6. **实时间隔行程压缩 (SUMP RLE Compression)**：
-   - 固件支持 SUMP RLE (Run-Length Encoding) 协议规范（Flags  x0100）。
+   - 固件支持 SUMP RLE (Run-Length Encoding) 协议规范（Flags 0x0100）。
    - 对低频信号或方波平台进行实时流式游程编码，经实测 100kHz 测试方波压缩比达到 **10.78倍**（1024 字节压缩至 95 字节），突破 USB CDC 带宽与 BRAM 深度瓶颈，支持 PulseView 超长周期连续抓取。
 7. **CPLD 硬件环形预触发深度缓存 (Circular Pre-Trigger Buffer)**：
    - 采样引擎在 ARM 状态下立即启动对 CPLD Block RAM 的环形预采样（写指针自动在目标深度内循环回滚）。
@@ -199,3 +220,63 @@ C:\Users\Administrator\.platformio\penv\Scripts\pio.exe run -e logic_analyzer -t
    - 将 CPLD 32-bit BRAM 向量解包循环重构为单周期展开提取，消除逐 nibble 循环分支预测开销。
    - 连续高频捕获帧率提升至 **245.1 captures/sec**，USB 2.0 FS CDC 有效传输带宽提升至 **~0.96 MB/s**。
    - 经实测通过连续 300 轮与 500 轮零误差极限压测（Error Count: 0/500）。
+
+---
+
+## 9. 波形发生器（信号源）使用说明
+
+### 9.1 输出能力总览
+
+| 输出 | 引脚 | 波形 | 频率范围 | 说明 |
+|---|---|---|---|---|
+| **模拟波形** | **PIN_11**（DAC0，H4 排针第 14 脚） | 正弦 / 方波 / 锯齿 / 三角 | 1 Hz ~ 采样率上限/波形最少采样点 | 10bit DAC + MCU DMA 循环播表，幅度 1~100%。默认采样率上限 **5 MSa/s**（2026-10-12 上板标定）：方波 ≤2.5 MHz、锯齿 ≤1.25 MHz、正弦/三角 ≤0.625 MHz。上限由 DMA 握手带宽决定——每样本约 16 总线周期，采样间隔 ≥20 周期（=5 MSa/s）时无系统性丢拍，剩余误差仅分频器网格量化（典型 ≤±0.5%，100MHz 整除频点精确）；高于该值会丢拍，实测频率偏差可达数个百分点甚至减半 |
+| **数字方波** | **PIN_5**（H4 排针第 4 脚） | 方波（50% 占空比） | **1 Hz ~ 100 MHz** | CPLD 纯数字双段分频 f=100MHz/((A+1)(B+1))，低至 1 Hz、高至 100 MHz（A=B=0），频率误差 ~ppm 级 |
+| **触发/脉冲引擎** | **PIN_5**（与方波二选一） | 电平 / 脉冲 | 延时 0 ~ 42.9 s（10 ns 步进）；时基 ×1000 时最长可达 11.9 小时 | 模式：延时→高/低电平、延时→脉冲、上位机立即触发（电平或脉冲）；脉宽独立可调；运行状态与剩余时间可回读（倒计时） |
+
+> 说明：PIN_11 的"任意波形"由 DAC 循环播表实现，频率上限受 DAC 采样率物理限制；需要 2.5 MHz 以上的高频方波请使用 PIN_5 数字输出（可到 100 MHz）。
+
+### 9.2 上位机操作（推荐）
+
+1. 双击 `Logic/tools/run_wavegen.bat` 启动图形上位机（Tkinter，使用系统 Python 3.11，自带 tkinter/pyserial，无需安装部署）。
+2. 选择串口（USB CDC，通常 COM33）→ 点击"连接"。连接成功后标题栏显示固件版本与当前采样率上限。
+3. **左侧 PIN_11 面板**：选波形 → 填频率（Hz/kHz/MHz）→ 调幅度滑条 → 勾选"输出使能" → 点击"应用波形设置"。
+   - 超出频率上限时自动钳制并弹窗提示；
+   - "实际输出"标签实时显示设备回报的真实频率、波表长度与采样率上限；
+   - "采样率上限"可现场调高（高速模式；>5 MSa/s 时 DMA 握手成为瓶颈，频率精度不再保证，如波形失真请回调）。
+4. **右侧 PIN_5 面板**：
+   - 选"数字方波" → 填频率 → 点"输出方波 1Hz-100MHz"；
+   - 选"触发/脉冲引擎" → 选触发模式（延时/上位机 × 电平/脉冲）、输出电平、空闲电平、延时、脉宽 → "应用设置" → **"布防(启动延时)"**（延时模式）或 **"立即触发"**；
+   - 底部状态栏实时显示：运行中/已完成/空闲、剩余时间、当前输出电平。
+5. 注意：该串口与 PulseView/OLS 互斥（同一 CDC 虚拟串口不能同时被两个程序打开）。
+
+### 9.3 控制协议（SUMP 扩展帧，便于脚本自动化）
+
+在 SUMP 协议之上扩展 5 字节控制帧：`[操作码 1B][负载 4B 小端]`。
+
+| 操作码 | 功能 | 负载格式 |
+|---|---|---|
+| `0x84` | 设置 PIN_11 波形 | `[7:0]`波形(0=正弦 1=方波 2=锯齿 3=三角) `[15:8]`幅度% `[16]`输出使能 |
+| `0x85` | 设置 PIN_11 频率 | 32 位 Hz |
+| `0x86` | PIN_5 配置 | `[1:0]`模式(0=延时→电平 1=延时→脉冲 2=主机→电平 3=主机→脉冲) `[2]`有效电平 `[3]`空闲电平 `[5:4]`时基倍率(10ns×1/10/100/1000) `[8]`方波选通 |
+| `0x87` | PIN_5 延时 | 32 位 tick（tick = 10 ns × 时基倍率） |
+| `0x88` | PIN_5 脉宽 | 32 位 tick |
+| `0x89` | PIN_5 控制 | `[0]`布防 `[1]`立即触发 `[2]`复位 |
+| `0x8A` | PIN_5 方波频率 | 32 位 Hz（1 Hz ~ 100 MHz） |
+| `0x8B` | DAC 采样率上限 | 32 位 Hz（默认 **5 MSa/s**；范围 1526 ~ 100 MHz。>5 MSa/s 时 DMA 每样本握手成为瓶颈，频率精度不保证） |
+| `0x8C` | 查询状态 | 设备回复 `[0xAA][20][...]`：版本/波型/幅度/设定频率/实际频率/标志(使能·方波选通·引擎忙·完成)/表长 log2/采样率上限 |
+| `0x8D` | 查询触发状态 | 设备回复 `[0xAA][7][...]`：`[0]`busy/done/out、`[1..4]`剩余 tick、`[5]`配置字节、`[6]`方波选通 |
+
+### 9.4 上电默认状态与自测
+
+- 上电默认：**PIN_11 输出关闭**（避免上电即有模拟输出）；**PIN_5 输出 100 kHz 方波**，保持 SUMP 自检回环功能——用杜邦线短接 **H4 的 4 脚 (PIN_5) ↔ CH4 (PIN_10)** 即可以示波/逻辑分析仪观察自检方波；SUMP 采集时固件会按采样率档位自动调整方波频率（见 §8）。
+- PIN_5 切到"触发/脉冲引擎"后，SUMP 采集不再自动改写方波分频；如需恢复请切回"数字方波"或发送 SUMP `0x00` 复位。
+
+### 9.5 硬件内部实现（维护者参考）
+
+- DAC 通路：MCU DMAC CH0（请求源 `EXT_DMA3_REQ`=4）循环搬运 `wave_buf[]` → CPLD APB 窗口 `0x60003000` → `apb_dac` → `alta_dac` 硬核（FIXED_COORD `{22 11}` @ `logic/logic_board.asf` 用户段）→ PIN_11。改动该绑定需重走三段式编译并重烧 logic 位流。
+- DAC 定速要点（2026-10-12 标定，改 `main.c` 波形发生器时勿破坏）：
+  - AHB→APB 桥 + DAC 每次采样握手约需 **16 总线周期**，采样间隔 <20 周期时请求会丢拍 → 默认上限取 **5 MSa/s**（`gen_rate_cap`），该值下无系统性丢拍（剩余频率误差仅分频器网格量化，典型 ≤±0.5%）；
+  - `gen_fill_table()` 把波表**重复填满整个 DMA 缓冲区**（2048 点）、LLI `transferSize` 用全缓冲长度——否则小表（如 2 点方波）每几样本重载一次 LLI，重载会抢走请求时隙导致输出频率减半。
+- 硬宏保活：`analog_ip.v` 中 `dac_dout` 必须挂一个 `preserve` 寄存器（keep-guard），否则悬空输出会被 Quartus 当死逻辑删除（连带 Supra FIXED_COORD 绑定失效）；`run_quartus_steps.bat` 已加自动校验。
+- 方波/触发引擎：全部在 `Logic/logic/analog_ip.v`（`sq_*` 级联递减计数器 + `p5_*` 状态机），寄存器见 §3 表。
+

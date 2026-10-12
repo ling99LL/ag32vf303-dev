@@ -31,7 +31,9 @@
   pio run -e flow -t buildlogic    # 仅生成逻辑位流（纯 VE 流程）
   pio run -e cpldled -t prelogic   # 自定义逻辑：生成 logic/ 工程
   ```
-- 自定义 CPLD 逻辑三段式（logic_dir 流程下 **buildlogic 不产位流**）：`prelogic` → `logic/run_quartus.tcl`（Quartus 无头综合）→ `logic/run_supra.bat`（Supra 布局布线）→ `-t logic` + `-t upload`。
+- 自定义 CPLD 逻辑三段式（logic_dir 流程下 **buildlogic 不产位流**）：`prelogic` → `logic/run_quartus_steps.bat`（Quartus 分步编译）→ `logic/run_supra.bat`（Supra 布局布线）→ `-t logic` + `-t upload`。
+  - **本机坑（2026-10-12 实测）**：Quartus 13 各工具收尾以 `0xC0000409` fast-fail 退出，`run_quartus.tcl`（execute_flow 一键流程）会在 map 后误报 `293007` 中止；`Logic/logic/run_quartus_steps.bat` 分步跑同一流程并以各步 summary 报告校验，可稳定通过（详见 `Logic/HANDOVER.md`）。
+  - **勿删**该脚本第 1 步的 `af_ip.tcl` 宏分区扫描与两道硬宏护栏（qsf 缺分区 / 网表缺 `alta_dac` 即报错拒出流）——防 `alta_dac` 被综合当死逻辑删除（2026-10-12 DAC 宕机修复）；`analog_ip.v` 中 `dac_dout` 的 keep-guard 寄存器同理不可删。
   - **脚本位置**：`run_quartus.tcl`/`run_supra.bat` 包装脚本在 `projects/ag32vf303_flowled/logic/` 与 `Logic/logic/` 都有；只有 `FOC2205/logic/` 是原始 `af_quartus.tcl` / `af_run.tcl`，需直接调 Quartus 与 Supra（`quartus_sh -t af_quartus.tcl` → `af_cmd.bat -f af_run.tcl`），各工程完整命令见其自身 README。
 - OpenOCD 直读调试：`halt` 后用 `mem2array`+`echo`（`mdw` 在 openocd_cmd.bat 下可能静默），可 halt 后 `mww` 直接驱动 GPIO 验证硬件。
 
@@ -51,5 +53,6 @@
 
 - MCU 流水灯与纯 CPLD 流水灯均已烧录验收；JTAG 采样/无串口调试技巧见 HANDOVER §3.5/§9.4。
 - `FOC2205/` 全链路构建实测通过（Quartus 综合 + Supra P&R + 位流校验），硬件实测细节见 `FOC2205/README.md`；`Logic/` 性能实测数据见 `Logic/PERFORMANCE_REPORT.md`。
+- `Logic/` 信号发生器（PIN_11 DAC 波形 + PIN_5 数字/触发引擎）2026-10-12 夜已上板烧录并冒烟（首轮 18/18 → DAC 定速修复后 19/19）+ **回环实测 18/18**（PIN_10↔PIN_11 跳线，DAC 全波形闭环）；PIN_5 物理回环待改接 PIN_5↔CH 跳线，LED 启动序列待肉眼确认（见 `Logic/HANDOVER.md`）。
 - SDK 来源：百度网盘 `pan.baidu.com/s/17bp-zAnsYRuVMRTSSVHN5A` 提取码 `12ej`；官方技术群 QQ 379254175。
 - 换 QFN32 自研板时：改 `logic_device = AGRV2KQ32` + 按 DAPLink 手册 p.12-13 重写 VE + 重烧 logic。
