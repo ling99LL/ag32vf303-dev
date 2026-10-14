@@ -1,0 +1,219 @@
+=== PAGE 1 ===
+USBLC6-2P6
+Uni-directional 5V Low Capacitance ESD
+Rev:1.0 Zhuhai Hongjiacheng Technology co., Ltd  
+1  of  3
+1 2 3
+6 5 4
+•Low leakage current
+•Low clamping voltage
+•IEC 61000-4-2 (ESD Air): ±30kV
+•IEC 61000-4-2 (ESD Contact): ±30kV
+•IEC 61000-4-5 (Lightning 8/20µs):5.5A
+•Cellular Handsets and Accessories
+•Personal Digital Assistants
+•Notebooks and Handhelds
+•Portable Instrumentation,Digital Cameras
+•Peripherals, Audio Players, Industrial Equipment
+SYMBOL PARAMETER CONDITIONS VALUE UNIT
+VESD Electrostatic Discharge Voltage
+ESD per IEC 61000-4-2( Air ) ±30 KV
+ESD per IEC 61000-4-2( Contact） ±30 KV
+PPP Peak Pulse Power tp = 8/20 µs 80 W
+IPP Rated Peak Pulse Current tp = 8/20 µs 5.5 A
+TJ Operating JunctionTemperature Range － -55 to +150 ℃
+TSTG Operating JunctionTemperature Range － -55 to +150 ℃
+SYMBOL PARAMETER
+VC Clamping Voltage @ IPP 
+VBR Breakdown Voltage @ IT
+IPP Peak Pulse Current
+IT Test Current
+IR Reverse Leakage Current @ VRWM
+VRWM Peak Reverse Working Voltage
+PPP Peak Pulse Power Dissipation
+CJ Junction Capacitance @ VR=0V,f=1MHz
+IF Forward Current
+VF Forward Voltage @IF
+Features
+SOT-563 Plastic-Encapsulate ESD Protection Diodes
+SOT-563
+Applications
+Function Diagram
+(Ta=25℃ Unless otherwise specified) Maximum Ratings
+Electrical Parameter
+F
+Reverse Working Voltage
+5V Max. 
+Low capacitance
+0.5 pF(Max.) 
+IT
+IR
+I
+IPP
+VRWMVBRVC
+IT
+IR
+IF
+VF
+V
+1 3
+46 5
+2
+VBUS
+GND
+I/O1 I/O2
+I/O1 I/O2
+
+=== PAGE 2 ===
+USBLC6-2P6
+Uni-directional 5V Low Capacitance ESD
+Rev:1.0 Zhuhai Hongjiacheng Technology co., Ltd  
+2  of  3
+PARAMETER SYMBOL CONDITION Min Typ Max UNIT
+Peak Reverse Working Voltage VRWM Ta=25℃ － － 5.0 V
+Breakdown Voltage VBR IT=1mA, Ta=25℃ 6.0 － － V
+Reverse Leakage Current IR VRWM=5.0V, Ta=25℃ － － 0.08 μA
+Clamping Voltage VC IPP=1A,tp=8/20μs － － 10 V
+Clamping Voltage VC IPP=5.5A,tp=8/20μs － － 14 V
+Junction Capacitance CJ VRMW=0V,f=1MHz － － 0.5 pF
+Electrical Characteristics (Ta=25℃ Unless otherwise specified) 
+Ratings And Characteristics Curves (Ta=25℃ Unless otherwise specified) 
+Fig.1 Pulse Waveform
+0
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+110
+0 5 10 15 20 25 30
+%ofPeakPowerCurrent
+
+t-Time(μs)
+T =20μs（I /2）d PP
+T =8μs（PeakvalueI ）r PP
+Parameters:
+Waveform
+t =8μsr
+t =20μsd
+Fig.2 Pulse Waveform-ESD(IEC61000-4-2)
+Current(%)
+Time(ns)
+t 0.7to1.0nsr
+30ns
+60ns
+0 30 60 90
+10
+90
+25
+50
+75
+100
+0
+Fig.3 Peak Pulse Power vs. Pulse Time
+P  - PeakPuslePower(W)PP
+tp-PulseDuration(μs)
+10
+100
+10000
+0.1 10 100 10001
+1000
+Fig.4 Clamping Voltage vs. Peak Pulse Current
+I -PeakPulseCurrent(A)PP
+V -ClampingVoltage(V)C
+0
+5
+10
+20
+1 3 62 5
+15
+4
+
+=== PAGE 3 ===
+USBLC6-2P6
+Uni-directional 5V Low Capacitance ESD
+Rev:1.0 Zhuhai Hongjiacheng Technology co., Ltd  
+3  of  3
+Profile Feature Pb-Free Assembly
+Pre-heat
+Temperature Min (TS(min)) +150℃
+Temperature Max(TS(max)) +200℃
+Time (Min to Max) (tS) 60-180 secs.
+Average ramp up rate (Liquid us Temp (TL) to peak) 3℃ /sec. Max
+TS(max) to TL - Ramp-up Rate 3℃ /sec. Max
+Reflow
+Temperature(TL)(Liquid us) +217℃
+Temperature(tL) 60-150 secs.
+Peak Temp (TP) +260(+0/-5)℃
+Time within 5℃ of actual Peak Temp (tP) 20-40secs
+Ramp-down Rate 6℃ /sec. Max
+Time 25℃ to Peak Temp (TP) 8 min. Max
+Do not exceed +260℃
+U1
+U-
+1SFIFBU
+U4
+3 BNQEP XO
+$SJ UJD BM ; POF
+5-U P51
+3 BNQVQ
+51
+5-
+
+	U℃UP1FBL
+ 5JNF
+5FNQFSBUVSF
+54	NB Y
+54	NJ O
+Recommended Soldering Conditions
+Ordering Information
+Symbol
+Dimensions
+Millimeters Inches
+Min. Max. Min. Max.
+A 0.525 0.600 0.021 0.024
+A1 - 0.050 - 0.002
+b 0.170 0.270 0.007 0.011
+c 0.090 0.160 0.004 0.006
+D 1.500 1.700 0.059 0.067
+E1 1.100 1.300 0.043 0.051
+E 1.500 1.700 0.059 0.067
+e 0.450 0.550 0.018 0.022
+L 0.100 0.300 0.004 0.012
+L1 0.200 0.400 0.008 0.016
+θ 8° REF 8° REF
+E1L
+e
+b
+D
+E
+A1
+A
+L1
+θ
+θ
+c
+Symbol
+Dimensions
+Millimeters Inches
+Min. Max. Min. Max.
+G 0.45 0.55 0.018 0.022 
+H 0.95 1.05 0.037 0.041 
+K 1.35 1.45 0.053 0.057 
+X 0.25 0.35 0.010 0.014 
+Y 0.25 0.35 0.010 0.014 
+K
+H
+G
+Y
+X
+Package Outline Dimensions  (SOT-563)
+Suggested Pad Layout
+PREFERED P/N PACKAGE SIZE(mm) DELIVERY MODE MPQ(PCS)
+USBLC6-2P6 SOT-563 0.55×1.6×1.6 7'' REEL 3000
+

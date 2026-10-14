@@ -1,0 +1,70 @@
+$date
+  Sat Oct 10 22:32:48 2026
+$end
+$version
+  AG32-PlanB CPLD Sampler VCD
+$end
+$timescale 1ns $end
+$scope module ag32_cpld_la $end
+$var wire 1 ! ch0_pin7 $end
+$var wire 1 " ch1_pin8 $end
+$var wire 1 # ch2_pin9 $end
+$var wire 1 $ ch3_pin10 $end
+$upscope $end
+$enddefinitions $end
+$dumpvars
+0!
+0"
+0#
+0$
+$end
+#0
+0!
+#0
+0"
+#0
+0#
+#0
+0$
+#400
+1$
+#5400
+0$
+#10400
+1$
+#15400
+0$
+#20400
+1$
+#25400
+0$
+#30400
+1$
+#35400
+0$
+#40400
+1$
+#45400
+0$
+#50400
+1$
+#55400
+0$
+#60400
+1$
+#65400
+0$
+#70400
+1$
+#75400
+0$
+#80400
+1$
+#85400
+0$
+#90400
+1$
+#95400
+0$
+#100400
+1$
