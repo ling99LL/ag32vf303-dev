@@ -7,12 +7,15 @@ AG32VF303KCU6 (QFN32) + MT6701QT-STD + DRV8316C 三芯片 FOC 驱动板 —— �
 | 项 | 值 |
 |---|---|
 | MCU | AG32VF303KCU6，QFN32，`logic_device = AGRV2KQ32` |
+| 电机 | 2205（型号 2804）：12N14P **极对数 7**，8V/2.5A/20W/6000RPM，0.03N·m，适用 7.4~16V（供电取 8~16V）→ [docs/电机参数.md](docs/电机参数.md) |
 | 磁编码器 | MT6701QT-STD，SSI 24clk @12.5MHz（1.92µs/帧），CRC6 每帧校验，Mg[2]=按压 |
 | 电机驱动 | DRV8316CRRGFR，3x PWM 模式，SPI 配置 @6.25MHz，三电阻电流采样 |
 | 控制环 | GPTIMER0 中心对齐 20kHz，更新中断里准同时采电流+读角度 |
 | 调试串口 | UART0 @115200（PIN_20=TX / PIN_21=RX，不占 15 个可分配脚） |
 
 ## 目录
+
+**逐文件用途与关键词 → [FILE_INDEX.md](FILE_INDEX.md)**（全文件索引：306 个文件全覆盖，含 logic 编译产物与按任务反查表）
 
 ```
 FOC2205/
@@ -49,6 +52,7 @@ sincos LUT）；prelogic 0 错 0 警；Quartus 0 errors；Supra 0 errors；`logi
 - [硬件接线设计（docs/DRV8316+MT6701_FOC驱动板接线设计.md）](docs/DRV8316+MT6701_FOC驱动板接线设计.md)（**v6.1**：INL_EN=PIN_28/JNTRST（2 线 DAPLink 零影响）、BOOT1 纯净 10k 下拉、独立 LDO 电源架构、BRK/DO 移至 PIN_22/23）
 - [QFN32 芯片引脚评估与分配规范（docs/FOC2205_QFN32芯片引脚评估与分配规范.md）](docs/FOC2205_QFN32芯片引脚评估与分配规范.md)（V3.1：原生定义经 DAPLink 手册逐脚核对，含 INL_EN=PIN_28 复用记录）
 - [审查结果交付文档（docs/FOC2205_审查结果交付文档.md）](docs/FOC2205_审查结果交付文档.md)：两轮审查整改交付记录。
+- [电机参数（docs/电机参数.md）](docs/电机参数.md)（2026-10-14：2205/2804 电机参数表文本转录 + 与固件交叉核对——极对数 7 确认 `POLE_PAIRS`、供电 8~16V 交集、峰值电流无裕量；原图 `docs/电机参数.jpg`）。
 
 > 两轮审查报告（P0/P1/P2 共 10 项、D-1~D-6 共 6 项）与逐条裁定整改记录已于 2026-10-03 移出仓库树，结论均已落地到代码与接线设计；原文可在 git 历史追溯（引入于 29bc30d / 2aa56b1）。
 

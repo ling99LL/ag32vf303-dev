@@ -1,5 +1,7 @@
 # AG32VF303KCU6 (QFN32) FOC 力反馈旋钮
 
+> **全文件索引 → [../FILE_INDEX.md](../FILE_INDEX.md)**（`foc/` 目录 509 个文件逐个标明用途/关键词，含 CSV 实验数据命名解码与"按任务反查"表）
+
 用 AGM AG32VF303KCU6（RISC-V 200MHz + 2K LE CPLD）+ 三相输入跟随驱动板 + 电机内置霍尔，
 实现 SimpleFOC 风格的力反馈旋钮（棘轮档位 / 阻尼 / 惯性 / 有界 / 弹簧 / 自由）。
 

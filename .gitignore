@@ -47,6 +47,10 @@ smartknob-master.tar.gz
 *.dwl
 *.dwl2
 
+# Session/tool temp state (EasyEDA review extracts, work journal)
+.tmp_sch_review/
+.workbuddy/
+
 # OS junk
 Thumbs.db
 Desktop.ini

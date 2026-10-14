@@ -1,0 +1,1594 @@
+  MT6701                    
+
+                                  MT6701
+                            
+                            90°
+                            X-YZ
+     0~360°                 
+     3.3V~5.0VEEPROM        
+                            
+        VDD>4.5V
+      : I2C, SSI, ABZUVW,         MT6701ABZ
+                            1024/
+        PWMZ                4096/
+     55,000 /               UVW1~16
+     <5 us
+     ABZ1~1024/                   MT6701I2CSSI
+                            MCU14
+                            PWM
+     UVW1~16                12
+
+                                 PUSH
+                            
+     RoHS 2011/65/EU        
+     SOP-8QFN3x3-16L        Z
+
+                                 MT6701EEPROMVDD
+                            >4.5V
+       
+       BLDC                 1  1.9 2024.05
+       
+       
+       
+
+www.magntek.com.cn | 
+MT6701
+
+
+
+                       
+
+..................................................................................................1
+
+..........................................................................................................1
+
+........................................................................................................1
+
+1 ..........................................................................................3
+
+   1.1 SOP-8.......................................................................................3
+
+   1.2 QFN-16.......................................................................................4
+
+2 .................................................................................................5
+
+3 ...........................................................................................6
+
+4 ..................................................................................................6
+
+5 ..........................................................................................7
+
+6 ..........................................................................................9
+
+7 ....................................................................................................10
+
+   7.1 I/O........................................................................................10
+
+   7.2 ABZ/UVW/PWM/Analog.............................................................11
+
+   7.3 ABZ(ABZ).......................................................12
+
+   7.4 UVW............................................................................................17
+
+   7.5 ..........................................................................................18
+
+   7.6 (PWM).........................................................................19
+
+   7.7 I2C .................................................................................................20
+
+   7.7.1 I2C..............................................................................................21
+
+   7.7.2 I2C................................................................................22
+
+   7.7.3 I2C...........................................................................................23
+
+   7.8 SSI.................................................................................................24
+
+   7.8.1 SSI...............................................................................................25
+
+   7.8.2 SSI.........................................................................................26
+
+   7.9 (PUSH).........................................................................................27
+
+8 EEPROM....................................................................................28
+
+   8.1 .....................................................................................................28
+
+   8.2 EEPROM.........................................................................................32
+
+9  ......................................................................................................33
+
+10 ...........................................................................................................34
+
+   10.1 SOP-8......................................................................................................34
+
+   10.2 QFN-16.................................................................................................35
+
+11 ..........................................................................................................36
+
+12 ..............................................................................................................37
+
+www.magntek.com.cn |   2  1.9 2024.05
+MT6701
+
+
+
+1. 
+
+1. 1 SOP-8
+
+                       8 7 65
+
+                                  Sensing Center at
+                                  Geometry Center
+
+                       1234
+
+                       -1: SOP-8
+
+
+
+      #                
+                       3.3~5.0V
+VDD   1  
+         200K          ABZI2C/SSI
+MODE  2  /
+                       PWM
+OUT   3                
+                       
+GND   4  /             A/UI2C `SDA',
+                       SSI`DO'
+PUSH  5  /             B/VI2C`SCL',
+                       SSI`CLK'
+A     6  /
+         200K          Z/W  SSI `CSN'
+B     7
+
+Z     8
+
+*SOP-83MSL-3
+
+www.magntek.com.cn |   3                             1.9 2024.05
+MT6701
+
+
+
+1. 2 QFN-16
+
+                 Top View                               Bottom View
+          16 15 14
+      1                    13                           13 14 15 16
+
+      2                        12 Sensing Centerat 12                1
+
+                                   Geometry Center
+
+                               11                   11               2
+
+      3                        10                   10               3
+
+      4                        9                    9                4
+
+            5678                                        8765
+
+                               -2: QFN-16 
+
+
+
+         #                         
+             -                     
+NC       1   -                     
+             -                     
+NC       2   -                     
+                                   
+NC       3                         AI2C `SDA',
+             /                     SSI`DO'
+NC       4                         BI2C`SCL',
+             /                     SSI`CLK'
+PUSH     5
+             /                     Z SSI `CSN'
+A        6   200K 
+                                   W ­Z
+B        7   -                     
+                                   U ­A
+Z        8                         V ­B
+                                   3.3~5.0V
+W        9   
+             200K                  ABZI2C/SSI
+NC       10  /
+                                   PWM
+U        11                        
+
+V        12
+
+VDD      13
+
+MODE     14
+
+OUT      15
+
+GND      16
+
+*QFN-161MSL-1
+
+www.magntek.com.cn |               4                                    1.9 2024.05
+MT6701
+
+
+
+2. 
+
+      MT6701CTSOP-8MSL-3100/
+3000/MT6701QTQFN3x3-16LMSL-1
+1000/ 
+
+              
+
+              SOP-8 I2C, SSI;
+MT6701CT-STD  AB=1 /, Z=1 LSB; 0~360°; 
+
+MT6701QT-STD  QFN3x3 I2C, SSI;
+              AB=1 /, Z=1 LSB; UVW=1 / 0~360°; 
+
+MT6701CT-AKD AB=1,000 /, Z=4 LSB; 0~360°; 
+
+MT6701CT-AKE AB=1,000 /, Z=1 LSB; 0~360°; 
+MT6701CT-ACD AB=1,024 /, Z=4 LSB; 0~360°; 
+MT6701CT-A200 AB= 200 /, Z=1 LSB; 0~360°; 
+MT6701CT-A360 AB= 360 /, Z=1 LSB; 0~360°; 
+MT6701CT-A400 AB= 400 /, Z=1 LSB; 0~360°; 
+MT6701CT-A600 AB= 600 /, Z=4 LSB; 0~360°; 
+MT6701CT-A800 AB= 800 /, Z=4 LSB; 0~360°; 
+MT6701CT-STV I2C, SSI; AB=1 /, Z=1 LSB; 0~360°; 
+MT6701QT-ACD AB=1,024 /, Z=1 LSB; UVW=-A-B-Z0~360°; 
+
+www.magntek.com.cn |   5                    1.9 2024.05
+MT6701
+
+
+
+3. 
+
+           MT6701CMOS-3
+   
+   (ADC)
+   DACLDORC
+   EEPROM
+
+                 VDD
+
+LDO          EEPROM            DSP                DAC    M
+
+                                Angle            PWM     U  OUT
+                            Calculation           Push
+                                                 Button  X
+                            Calibration          UVW/
+Magnetic  G            ADC                       -A-B-Z     PUSH
+ Sensing               ADC
+                                                  ABZ
+Element
+                                                   I2C
+                                                         M  U
+                                                   SSI
+                                                         U  V
+
+          G                                              X  W
+
+                                                         M  A
+
+                            Interpolator                 U  B
+
+ I/V         OSC                                         X  Z
+ REF
+                                           MODE
+VSS
+                       -3: 
+
+4. 
+
+     
+""
+
+                                                            
+VDD                          -0.5                   7         V
+                              -55                            
+                              -40                 150        
+                               -                  125        kV
+                               -                  ±6.0       kV
+                                                  ±1.5
+
+www.magntek.com.cn |        6                               1.9 2024.05
+MT6701
+
+
+
+5. 
+
+3.0~5.5V-40~125
+
+                                     
+
+VDD       VDD          -          3.0  3.3~5.0 5.5  V
+
+Idd                    -               10.0    14.0 mA
+
+LSB       (ABZ)        N               360°/N -     °
+
+INL                    [1]        -    ±1.0 ±1.5 °
+
+DNL       (ABZ ), -4              -    ±0.02 -      °
+
+TN        ABZ          25         -    0.01         °rms
+
+Hyst      (ABZ )                  -    0.088 -      °
+
+TPwrUp                 <10us      -    -       32   ms
+
+TDelay                            -    5       -    us
+
+
+
+ROUT                   -          -    15      30   
+RL                     -                            K
+CL                     -          10   -       -    nF
+                                                    V
+                       Iload=1mA  -    -       1    V
+                       Iload=1mA                    %VDD
+VSat_High              12 DAC     VDD- -       -    mVrms
+                       25,        0.5               %
+                       DAC
+VSat_Low               [2]        -    -       0.5
+
+DAC_LSB DAC                       -    0.0244 -
+
+VNoise                            -    -       0.5
+
+Erm                               -0.3 -       0.3
+
+PWM
+
+FPWM PWM                          -5%  994.4   +5%  Hz
+                                  @27  /497.2  @27
+                       CL=1nF     
+TRise                  CL=1nF          -       1    us
+TFall                             -
+
+                                  -    -       1    us
+
+www.magntek.com.cn |        7                       1.9 2024.05
+MT6701
+
+
+
+I/O()
+
+VIH         I/O -                                       0.7*VDD -  -    V
+
+VIL         I/O -                                       -  -       0.3*VD V
+                                                                   D
+
+                                                        VDD-0.5 -  -    V
+VOH         I/O @Iout=2mA
+
+VOL         I/O @Iout=2mA -                                -       0.5  V
+
+ILK                               -                     -  -       ±1   uA
+
+TRISE                             , CLoad=20pf                         40 ns
+
+TFALL                             , CLoad=20pf                         40 ns
+
+[1]: 25-40~125
+AGDISP
+
+[2]: 
+
+
+
+                             Erm  =          5V
+                                     [    - 5 ]  100%
+                                     
+
+     1023 10bit code
+
+                                          Actual curve
+
+               2      TN          DNL+1LSB Ideal curve
+
+               1
+
+               0             INL
+
+                      0.35°
+
+       512
+
+       0                                                  180°     360° degrees
+           0°
+                      -4: INL, DNLABZ 10)
+
+www.magntek.com.cn |                      8                             1.9 2024.05
+MT6701
+
+
+
+6. 
+
+      3.0~5.5V-40~125
+1
+
+                                                  . 
+
+Dmag                   6mm1                     -       6.0  - mm
+                       
+
+Tmag                   2.5mm                    -       2.5  - mm
+
+Bpk                                             200     -    1,000 Gauss
+
+        
+
+AG                                              0.5 1.0      2.0 mm
+
+RS                                              -       - 55,000 RPM
+
+DISP                                            -       -    0.3 mm
+                       -5
+
+TCmag1                                          - -0.12      -
+TCmag2                 
+                                                                %/
+
+                                                - -0.035 -
+
+          +
+
+                                             N       S
+
+                                                        AG
+
+www.magntek.com.cn |     -5:                                    1.9 2024.05
+
+                                          9
+MT6701
+
+
+
+7. 
+
+         MT6701ABZUVWPWMI2CSSI
+   14PUSH
+
+7.1 I/O
+
+      SOP-8ABZ/UVW (), I2CSSI678
+PWM3
+
+SOP-8 I/O
+
+      I2C       SSI    ABZ       UVW     PWM        Push
+
+3                                        PWM  
+
+5                                                   Push
+
+6     SDA       DO     A         U
+
+7     SCL       CLK    B         V
+
+8               CSN    Z         W
+
+      QFN-16, ABZ (), I2CSSI678UVW­A-B-Z
+1112 9PWM15
+
+QFN-16 I/O
+
+ I2C       SSI  ABZ    ABZ+UVW   ABZ     PWM        Push
+                                                    Push
+5                             A       A
+                              B       B
+6   SDA DO      A             Z       Z
+                             W       -Z
+7   SCL CLK     B             U      -A
+                              V      -B
+8          CSN  Z
+
+9
+
+11
+
+12
+
+15                                            PWM 
+
+www.magntek.com.cn |             10                 1.9 2024.05
+MT6701
+
+
+
+7.2 ABZ/UVW/PWM/Analog
+
+VDD                                 1                                  8     Z/W
+   0.1uf                                                                     B/V
+          TVS(6V)                                           200K             A/U
+                                    2              200K                      Push
+
+                       Analog      3                                   7
+                       /PWM
+                                                                       6
+                                   4
+                                                                       5
+
+                          Recommended
+                       for Better Reliability
+
+-6: MT6701CT(SOP-8) ABZ/UVW/PWM//Push
+
+                                               V/-B U/-A NC W/-Z
+
+VDD                                            12 11 10  9
+                                                              8
+             TVS(6V)               13              200K                      Z
+                                                              7              B
+                0.1uf Analog              200K                               A
+                            /PWM                                             PUSH
+                                   14
+              Recommended
+           for Better Reliability  15                                     6
+
+                                   16                                     5
+
+                                                   1234
+
+                                          NC NC NC NC
+
+-7: MT6701QT(QFN-16) ) ABZ/UVW/PWM//Push
+
+www.magntek.com.cn |                           11                            1.9 2024.05
+MT6701
+
+
+
+7.3 ABZ(ABZ)
+
+          -8(1)CCWB
+    A1/4CWAB
+    1/4Z0°
+
+         50msABZ50ms
+    ABZ
+
+                                         Top View
+
+                                        87 65
+
+                                              N        
+                                                           
+                                        S
+                                                        CCW
+
+                                        1234
+
+VDD
+
+                                        CCW                  CW
+
+A
+
+B
+
+                                  50ms
+
+Z
+
+                                             360°
+
+     -8(1) ABZAB
+
+www.magntek.com.cn |                               12            1.9 2024.05
+MT6701
+
+
+
+          -8(2)MT6701-8(1)AB
+    AB
+    50ms
+
+VDD
+
+                                                  
+
+A
+
+        50msAB                            
+                                  AB
+
+B
+                           50ms
+
+Z
+
+                                            360°
+
+                                 -8 (2) ABZAB
+
+www.magntek.com.cn |                  13          1.9 2024.05
+MT6701
+
+
+
+          Z, -9-10Z1, 2, 4, 8, 12, 16 LSBs 180° 
+    Z
+
+                                      CCW
+A
+
+B
+
+         2LSB ...4LSB...8LSB...12LSB....16LSB            2LSB ...4LSB...8LSB...12LSB....16LSB
+
+Z  1LSB                                            1LSB
+
+                       360°
+
+         -9Z12481216LSBsABZ
+
+                                       CCW
+A
+
+B
+
+Z
+                                              180°
+                                                                   360°
+                                     -10Z180°ABZ°
+
+www.magntek.com.cn |                           14                        1.9 2024.05
+MT6701
+
+
+
+          MT6701ABZ1~1,024/ABZ
+    //-11-12
+
+                                                                           360°
+
+A                         1                    255       256           256 /
+
+B                      1                  255       256                256 /
+
+   LSB
+
+Z                                                                1024
+                                                            1023
+                             12345                      1022
+                                                   1021
+                                              1020
+                                          1019
+
+                       10=210 =1024 =256 
+
+                       -11: ABZ=10
+
+                                    360°
+
+A                         1               999       1000               1,000 /
+
+B                      1                  999       1000               1,000 /
+                                                                                        1.9 2024.05
+                            LSB                                  4000
+                                                            3999
+Z                                                       3998
+                                                   3997
+                            12345             3996
+                                          3995
+                                  1,000=4,000
+
+                          -12: ABZ=1000 /
+
+www.magntek.com.cn |                15
+MT6701
+
+
+
+Z3`Z_PUL_WID[2:0]'
+
+Z`Z_PUL_WID[2:0]'( EEPROM)
+
+Z_Pulse_Width[2:0]  (LSBs) Z_Pulse_Width[2:0]                  (LSBs)
+                                                                    12
+          000          1                      100                   16
+
+          001          2                      101                  180°
+                                                                     1
+          010          4                      110
+
+          011          8                      111
+
+Z120~360°
+
+Z(EEPROM)
+
+          7    6       5     4         3           2   1       0
+
+Zero_MSB NA    Z_PULSE_WIDTH[2:0]                  ZERO[11:8]
+
+Zero_LSB                           ZERO[7:0]
+
+ABZ10`ABZ_RES[9:0]';
+
+ABZ (EEPROM)
+
+          7    6       5     4         3           2   1       0
+
+ABZ_RES        UVW_RESp3:0]            NA          NA  ABZ_RES[9:8]
+
+ABZ_RES                      ABZ_RES[7:0]
+
+* EEPROM, 8
+
+www.magntek.com.cn |               16                          1.9 2024.05
+MT6701
+
+
+
+  7.4 UVW
+
+        MT6701120°UVW-13UVW
+
+U                                               U
+
+V                                               V
+
+W                                               W
+
+           0° 60° 120° 180° 240° 300° 360°             360° 300° 240° 180° 120° 60° 0°
+
+              CCW                                                CW
+
+                       -13: UVW
+
+UVW (EEPROM)                                       UVW /
+                                                                   1
+                   UVW_RES[3:0]                                    2
+                               0000                                3
+                               0001                                4
+                               0010                                5
+                               0011                                6
+                               0100                                7
+                               0101                                8
+                               0110                                9
+                               0111                               10
+                               1000                               11
+                               1001                               12
+                               1010                               13
+                               1011                               14
+                               1100                               15
+                               1101                               16
+                               1110
+                               1111
+
+www.magntek.com.cn |                        17                        1.9 2024.05
+MT6701
+
+
+
+7.5 
+
+        MT670112DAC-14
+  `Output Mode'0MT6701 
+
+                            VDD
+                       100%
+
+0                               360°
+
+                         -14: 
+
+PWM(EEPROM)
+
+Output Mode              3 (SOP-8)/15 (QFN-16)
+             0                         
+             1                           PWM
+
+       -(0%10%)(100%90%)
+-15
+
+               VDD           Analog Output
+Clamp_High
+
+Clamp_Low                                  A_Stop DP 360°A_Start Degrees
+             0° A_Start
+                         -15: 
+
+www.magntek.com.cn |     18                     1.9 2024.05
+MT6701
+
+
+
+7.6 PWM
+
+          MT670112PWM-16
+          PWM     994.4Hz  497.2Hz           994.4Hz  PWM       
+    4119411916
+    84095
+    0~360°12
+    0.088°244nsPWM 994.4Hz
+    488nsPWM 497.2Hz
+
+                                                      PWM Frame 994.4Hz or 497.2Hz
+
+             Start          1                                                             End
+            Pattern            2                                                        Pattern
+                                   3
+             16 Clock                 4
+         Periods High                     5
+                                             6
+PWM (EEPROM)                                                    4090
+                                                                    4091
+              PWM_FREQ                                                  4092
+                           0                                               4093
+                           1                                                   4094
+                                                                                  4095
+
+                                                                                                     Time
+
+                                                                                           8 Clock
+                                                                                        Periods Low
+
+                              -16: PWM
+
+                                  PWM
+                                  994.4 Hz
+                                  497.2 Hz
+
+www.magntek.com.cn |          19                                                                 1.9 2024.05
+MT6701
+
+
+
+7.7 I2C
+
+       MT6701I2CMCUI2C
+ -17-18SCLMCU
+
+                                                               4.7k                4.7k
+
+VDD                                1                     8
+   0.1uf
+                                                200K
+
+          TVS(6V)                               200K                               MCU
+
+                                   2                     7     SCL                 Master
+                                                               SDA
+          Analog                   3            MT6701   6
+          /PWM                                                    Push
+
+                                   4            Slave    5
+
+             Recommended
+          for Better Reliability
+
+                                   -17: SOP-8I2C 
+
+                                       V/-B U/-A NC W/-Z
+
+VDD                                     12      11 10                        4.7K  4.7K
+                                   13
+             TVS(6V)                            200K     9                             MCU
+                                          200K                8
+               0.1uf Analog                     MT6701                                  Master
+                            /PWM   14                         7 SCL
+                                                  Slave
+              Recommended          15                              SDA
+           for Better Reliability                             6
+
+                                   16                       5  PUSH
+
+                                       1234
+
+                                          NC NC NC NC
+                                   -18: QFN-16I2C 
+
+www.magntek.com.cn |                            20                                       1.9 2024.05
+MT6701
+
+
+
+ 7.7.1 I2C 
+
+          S TA R T           TSCL        T T H IG H  LO W              2nd S TA R T       STO P
+
+SCL
+
+SDA                          T H D .D A              T S U .D A  TR    TF                 T S U .S T P
+
+               T H D .S T A
+
+                                         -19: I2C 
+
+I2C                                                                                  
+                             SCL                                    1     -           s
+                             ""                                           -           ns
+          TSCL               SCL                                  250     -           ns
+        THD.STA              SCL                                  250     -           ns
+         TLOW                SDA                                  250     -           ns
+         THIGH               SDA                                  100     -           ns
+        TSU.DA               SDA/SCL                               50                 ns
+        THD.DA               SDA/SCL                                    150           ns
+           TR                ""                                     -   150           ns
+           TF                                                       -
+        TSU.STP                                                   250     -
+
+www.magntek.com.cn |                                 21                              1.9 2024.05
+      MT6701
+
+      
+
+      7.7.2 I2C 
+
+               MT6701I2Cb'0000110b'1000110 14
+         0x030x04-200x030x04
+         0x030x04
+
+SC L          1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18                      19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36
+
+SD A          0 0 00 1 1 0 0    00000011                                        0 0 00 1 1 0 1  D7 D6 D5 D4 D3 D2 D1 D0
+
+              S lave ID :06                R egister A ddress:03                S lave ID :06                 D ata of0x03
+
+ 1st                         W rite S lave                        S lave 2nd                    R ead S lave                M aster S top
+S tart                               AC K                         A C K S tart                          AC K                No AC K
+
+SC L          37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54             55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72
+
+SD A          0 0 00 1 1 0 0    00000100                                        0 0 00 1 1 0 1  D7 D6 D5 D4 D3 D2 D1 D0
+
+              S lave ID :06                R egister A ddress:04                S lave ID :06                 D ata of0x04
+
+       1st                   W rite S lave                        S lave 2nd                    R ead S lave                M aster S top
+      S tart                         AC K                         A C K S tart                          AC K                No AC K
+
+                                   -20: I2C 
+
+      
+
+                             7  6  5                              4             3            2  1             0
+
+              0x03                                                              Angle[13:6]
+
+              0x04                 Angle[5:0]                                                   NA            NA
+
+        0~360° :
+
+                                    13
+
+                                    Angle < i > ·2i
+                                 = i=0
+                                           16384                                · 360°
+
+www.magntek.com.cn |                                                 22                                       1.9 2024.05
+MT6701
+
+
+
+ 7.7.3 I2C 
+
+SC L    1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27
+
+SD A    0 0 00 1 1 0 0  A7 A6 A5 A4 A3 A2 A1 A0                   D7 D6 D5 D4 D3 D2 D1 D0
+
+        S lave ID :06                 R egister A ddress          D ata for W riting
+
+ 1st                   W rite S lave                      S lave                           S lave S top
+S tart                         AC K                       AC K                             AC K
+
+                                      -21: I2C 
+
+www.magntek.com.cn |                  23                                              1.9 2024.05
+MT6701
+
+
+
+7.8 SSI 
+
+       MT6701SSIMCUSSI14
+  SSI-22-23
+
+VDD                                 1                               8  CSN   MCU
+   0.1uf                                                               CLK
+          TVS(6V)                                        200K          DO    Master
+                                    2                                  Push
+                                                200K
+
+                                                                    7
+
+          Analog                   3            MT6701  6
+          /PWM
+
+                                   4            Slave   5
+
+             Recommended
+          for Better Reliability
+
+                                   -22: SOP-8 SSI
+
+                                       V/-B U/-A NC W/-Z
+
+VDD                                     12      11 10   9               CSN  MCU
+                                   13                        8          CLK
+             TVS(6V)                            200K                    DO   Master
+                                          200K               7
+                0.1uf Analog                    MT6701                 PUSH
+                            /PWM   14
+
+              Recommended          15            Slave       6
+           for Better Reliability               23
+                                   16                        5
+                                         1              4
+
+                                       NC NC NC NC
+
+                                   -23: QFN-16 SSI
+
+www.magntek.com.cn |                            24                           1.9 2024.05
+MT6701
+
+
+
+ 7.8.1 SSI
+
+          SSI-24CSNCLKCSN
+    SSI
+
+ CSN
+(Input)
+
+          TH            TCLK    TCLKL TCLKH                TL
+
+  CLK         TDV             Data N+1
+(Input)         Data N
+
+   DO
+(Output)
+
+                                TR           TF
+
+CSN, CLK, DO            0.8VDD
+
+                        0.2VDD
+
+                              -24: SSI 
+
+SSI 
+
+                                                               
+                                               100              ns
+ TH    CSNCLK                                   64         -    ns
+TCLK                                            30              ns
+TCLKL                                           30         -    ns
+TCLKH                                                           ns
+  TL   CLK CSN                               0.5·TCLK      -    ns
+ TR    (20pf)                                    -              ns
+  TF   (20pf                                     -         -    ns
+ TDV   DO (20pf)                                 -
+                                                           -
+
+                                                       10  -
+
+                                                       10  -
+
+                                                       -   15
+
+www.magntek.com.cn |                    25                     1.9 2024.05
+MT6701
+
+
+
+ 7.8.2 SSI
+
+ CSN
+
+CLK      1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
+
+DO       D13 D12 D11 D10 D9  D8  D7 D6   D5  D4  D3  D2  D1  D0  Mg  Mg  Mg Mg  CRC CRC CRC CRC CRC CRC
+                                                                  3   2   10      5 43 2 1 0
+
+                 14 bit angle data                               4 bit Status         6 bit CRC
+
+                                                                  -25: SSI 
+
+     SSICSN-25CLKMCUDO
+MT6701CLKCLK
+
+ 0-13: 14 D[13:0]
+ 14-17: 4 Mg[3:0]
+ 18-23: 6CRC CRC[5:0]
+
+     D[13:0]0~360° 
+
+                                  13
+
+                                  D < i > ·2i
+                                  = i=0
+                                         16384           · 360°
+
+Mg[3:0] 
+
+Mg[1:0]                                  Mg[2]                                 Mg[3]  
+     0                                      0                                     0   
+     1                                      1                                     1   
+     2   
+     3
+              -
+
+CRC : D[13:0] Mg[3:0]18, D[13], Mg[0]
+CRC : X6+X+1, 
+
+www.magntek.com.cn |                             26                                   1.9 2024.05
+MT6701
+
+
+
+7.9 
+
+        MT6701MT6701
+  `PUSH_DIFF_DLY '`PUSH_THRD'
+  PUSHPUSH
+
+  Magnetic Field
+
+  Push
+Pressed
+
+    Push   PUSH_THRD
+Threshold
+                      PUSH_TIME_OUT
+    Push
+Released
+
+                  PUSH_DIFF_DLY  PUSH_DIFF_DLY
+                                                             Time
+0°
+Push
+
+                                 -26: 
+
+PUSH_THRD (EEPROM)                       
+                                            +44%
+       PUSH_THRD                            +50%
+                    0                       +38%
+                    1                       +31%
+                    2
+                    3                      (S)
+                                              0.5
+PUSH_DIFF_DLY (EEPROM)                       0.25
+
+    PUSH_DIFF_DLY                          (S)
+                    0                          8
+                    1                         16
+                                               4
+PUSH_TIME_OUT (EEPROM)                         2
+
+   PUSH_TIME_OUT
+                    0
+                    1
+                    2
+                    3
+
+www.magntek.com.cn |                 27                            1.9 2024.05
+MT6701
+
+
+
+8. EEPROM
+
+8.1 
+
+      7          6             5           4           3  2  1           0
+
+0x25  UVW_MUX
+
+0x29           ABZ_MUX                                       DIR
+                                                               ABZ_RES[9:8]
+0x30             UVW_RES[3:0]
+
+0x31                              ABZ_RES[7:0]
+
+0x32  HYST[2]          Z_PULSE_WIDTH[2:0]                 ZERO [11:8]
+
+0x33                                       ZERO [7:0]
+
+0x34  HYST[1:0]
+
+0x38  PWM_FREQ PWM_POL OUT_MODE
+
+0x3E             A_STOP[11:8]                             A_START[11:8]
+
+0x3F                              A_START[7:0]
+
+0x40                              A_STOP[7:0]
+
+  
+
+*UVW_MUX (0x25[7])                UVW (QFN)
+UVW_MUX UVW                                         UVW
+                                                   -A-B-Z
+              UVW_MUX
+                    0x0                        ABZ
+                    0x1                              ABZ
+                                                    UVW
+*ABZ_MUX (0x29[6])
+ABZ_MUX ABZ                               
+                                                    CCW
+               ABZ_MUX                               CW
+                    0x0
+                    0x1
+
+*DIR(0x29[1])
+ DIR 
+
+                    DIR
+                    0x0
+                    0x1
+
+www.magntek.com.cn |                       28                            1.9 2024.05
+MT6701                                       UVW 
+                                                      1
+                                                      2
+                                                      3
+*UVW_RES[3:0] (0x30[7:4])
+       UVW_RESUVW ()                                .......
+                                                     14
+                       UVW_RES<3:0>                  15
+                                     0x0             16
+                                     0x1
+                                     0x2
+                                    .......
+                                    0xD
+                                     0xE
+                                     0xF
+
+*ABZ_RES[9:0] (0x30[1:0]0x31[7:0])
+        ABZ_RES ABZ (/)
+
+ABZ_RES<9:0>                                 ABZ (/)
+
+0x000                                          1
+0x001                                          2
+0x002                                          3
+ .......                                     .......
+0x3FD                                        1022
+0x3FE                                        1023
+0x3FF                                        1024
+
+*HYST[2:0] (0x32[7]0x34[7:6])                (LSB)
+        HYST                                          1
+                                                      2
+                                  HYST                4
+                                   0x0                8
+                                   0x1                0
+                                   0x2
+                                   0x3             0.25
+                                   0x4              0.5
+                                   0x5                1
+                                   0x6
+                                   0x7
+
+www.magntek.com.cn |                    29                   1.9 2024.05
+MT6701
+
+
+
+*Z_PULSE_WIDTH[2:0] 0x32[6:4])               Z
+       Z_PULSE_WIDTH Z(-9-10)                   1 LSB
+                                                2 LSB
+                                 HYST           4 LSB
+                                  0x0           8 LSB
+                                  0x1          12 LSB
+                                  0x2          16 LSB
+                                  0x3           180°
+                                  0x4           1 LSB
+                                  0x5
+                                  0x6
+                                  0x7
+
+*ZERO[11:0] (0x32[3:0] & 0x33[7:0])            0°
+      ZERO                                        0°
+
+                                 ZERO          0.088°
+                                 0x000         0.176°
+                                 0x001
+                                 0x002            ...
+                                             359.736°
+                                    ...      359.824°
+                                0xFFD        359.912°
+                                 0xFFE
+                                 0xFFF       PWM
+                                             994.4 Hz
+*PWM_FREQ (Address 0x38[7])                  497.2 Hz
+       PWM_FREQ PWM
+                                             PWM
+                              PWM_FREQ       
+                                    0x0      
+                                    0x1
+
+*PWM_POL (0x38[6])
+       PWM_POLPWM
+
+                               PWM_POL
+                                    0x0
+                                    0x1
+
+www.magntek.com.cn |                     30            1.9 2024.05
+MT6701                                    `Out'
+                                            
+                                           PWM 
+
+*OUT_MODE(0x38[5])
+         OUT_MODE "OUT"
+
+                               OUT_MODE
+                                     0x0
+                                     0x1
+
+*A_START[11:0] ( 0x3E[3:0] & 0x3F[7:0])   /PWM 
+       A_START -15)                                     0°
+
+                               A_START               0.088°
+                                 0x000               0.176°
+                                 0x001
+                                 0x002                  ...
+                                    ...            359.736°
+                                 0xFFD             359.824°
+                                 0xFFE             359.912°
+                                 0xFFF
+
+*A_STOP[11:0] (0x3E[7:4] & 0x40[7:0])     /PWM 
+       A_STOP -15)                                      0°
+
+                                A_STOP               0.088°
+                                 0x000               0.176°
+                                 0x001
+                                 0x002                  ...
+                                                   359.736°
+                                    ...            359.824°
+                                 0xFFD             359.912°
+                                 0xFFE
+                                 0xFFF
+
+www.magntek.com.cn |   31                                    1.9 2024.05
+MT6701
+
+
+
+8.2 EEPROM
+
+      7                6             5        4            3  2  1             0
+
+0x25  UVW_MUX
+
+0x29           ABZ_MUX                                           DIR
+                                                                   ABZ_RES[9:8]
+0x30                   UVW_RES[3:0]
+
+0x31                                    ABZ_RES[7:0]
+
+0x32  HYST[2]             Z_PULSE_WIDTH[2:0]                    ZERO [11:8]
+
+0x33                                          ZERO [7:0]
+
+0x34        HYST[1:0]
+
+0x38  PWM_FREQ PWM_POL OUT_MODE
+
+0x3E                   A_STOP[11:8]                             A_START[11:8]
+
+0x3F                                    A_START[7:0]
+
+0x40                                          A_STOP[7:0]
+
+            
+
+     I2CEEPROM-18-19
+EEPROM4.5V<VDD<5.5V 
+
+                                                              
+            
+                                     I2C
+      EEPROM
+      EEPROM                         (           ,                             
+       (VDD>4.5V)
+                                     "")
+         
+                                     `0xB3' `0x09'
+
+                                     `0x05'  `0x0A'
+
+                                     600msMT6701
+
+                                      MT6701EEPROM
+                                     
+
+www.magntek.com.cn |                    32                                     1.9 2024.05
+MT6701
+
+
+
+9. 
+
+                     Top View                           90 degree
+
+      0 degree
+
+   87 65                                             8 7 65
+
+      45°  N                                            N
+
+      S                                                    S
+
+   1234                                              1234
+
+     180 degree                                         270 degree
+
+   87 65                                             8 7 65
+
+                       S                                S
+
+           N                                               N
+
+   1234                                              1234
+
+                     Top View                           90 degree
+
+      0 degree
+
+   16 15 14 13                                       16 15 14 13
+
+1                            12  1                                     12
+
+2                      S     11  2                      S              11
+
+      45°
+
+           N                     3                         N           10
+
+3                            10
+
+4                            9   4                                     9
+
+   5  6                7  8                          5  6  7        8
+
+      180 degree                                        270 degree
+
+   16 15 14 13                                       16 15 14 13
+
+1                            12  1                                     12
+
+2                            11  2                                     11
+
+           N                                            N
+
+3     S                      10  3                         S           10
+
+4                            9   4                                     9
+
+   5678                                              5  6  7       8
+
+www.magntek.com.cn |      -27:                                             1.9 2024.05
+
+                                                 33
+MT6701
+
+
+
+10. 
+
+ 10.1 SOP-8
+
+                                                                                                                          Z
+
+                                                         
+                                                                       
+                                                                        0.069
+                                              0.057                     0.010
+ A   1.450                         1.750      0.004                     0.061
+A1                                            0.053                     0.020
+A2   0.100                         0.250      0.013                     0.010
+  b                                           0.007                     0.201
+  c  1.350                         1.550      0.185                     0.244
+ D                                            0.228                     0.157
+  E  0.330                         0.510      0.150
+ E1                                                  0.050(BSC)
+  e  0.170                         0.250      0.016                     0.050
+  L                                              0°                        8°
+     4.700                         5.100                                0.026
+  Z                                           0.018
+     5.800                         6.200
+
+     3.800                         4.000
+
+                       1.270(BSC)
+
+     0.400                         1.270
+       0°                            8°
+
+     0.45                          0.65
+
+www.magntek.com.cn |                      34                                                                                 1.9 2024.05
+MT6701
+
+
+
+   10.2 QFN-16
+
+                                                      
+
+                                                                
+
+ A                     0.700            0.800  0.028            0.031
+A1
+A3                     0.000            0.050  0.000            0.002
+ D
+  E                           0.203REF                0.008REF
+D1
+ E1                    2.900            3.100  0.114            0.122
+  k
+  b                    2.900            3.100  0.114            0.122
+  e
+  L                    1.600            1.800  0.063            0.071
+  Z
+                       1.600            1.800  0.063            0.071
+
+                              0.275REF                0.011REF
+
+                       0.180            0.300  0.007            0.012
+
+                              0.500REF                0.020REF
+
+                       0.300            0.500  0.012            0.020
+
+                       0.220            0.420  0.009            0.017
+
+www.magntek.com.cn |                    35                             1.9 2024.05
+MT6701
+
+
+
+ 11. 
+
+  1. 
+  
+
+  2. 
+
+  3. 
+  
+  
+
+        www.magntek.com.cn
+  
+
+www.magntek.com.cn |   36  1.9 2024.05
+MT6701
+
+
+
+12. 
+
+                                                         
+  1.0  2020.03         
+  1.1  2020.06         EEPROM: 4.5V<VDD<5.5V
+  1.2  2020.07         POD
+  1.3  2020.09         
+  1.4  2021.01         PWM
+  1.5  2021.03         PWM
+                       
+  1.6  2022.05         AB
+  1.7  2022.07         SSI-25
+  1.8  2022.12         SSI-24
+  1.9  2024.05         SSI-25
+
+www.magntek.com.cn |   37  1.9 2024.05
+
