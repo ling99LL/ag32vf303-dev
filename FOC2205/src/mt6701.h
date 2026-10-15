@@ -24,6 +24,8 @@ typedef struct
 void mt6701_init(void);
 // One SSI frame read; returns 1 on CRC pass (sample filled), 0 on CRC fail.
 int mt6701_read(mt6701_sample_t *s);
+// Raw 24-bit frame of the last read, for bit-alignment analysis.
+extern uint32_t g_mt_last_raw;
 // CRC6 (X^6+X+1) over 18 bits, exposed for self-test
 uint8_t mt6701_crc6(uint32_t data18);
 

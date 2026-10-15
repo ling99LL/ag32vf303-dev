@@ -39,7 +39,7 @@ static inline void drv_wake(void)    { GPIO_SetHigh(DRV_SLP_GPIO, DRV_SLP_BIT); 
 static inline void drv_inl_low(void) { GPIO_SetLow (DRV_INL_GPIO, DRV_INL_BIT); }
 static inline void drv_inl_high(void){ GPIO_SetHigh(DRV_INL_GPIO, DRV_INL_BIT); }
 
-// Busy-wait helpers (rdcycle-based; SYSCLK = 200MHz -> 5 cycles/ns)
+// Busy-wait helpers (mcycle-based; SYSCLK = 200MHz -> 5 cycles/ns)
 void delay_ns(uint32_t ns);
 void delay_us(uint32_t us);
 void delay_ms(uint32_t ms);

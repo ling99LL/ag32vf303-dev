@@ -1,0 +1,2 @@
+@echo off
+"C:/Users/Administrator/.platformio/packages/tool-agrv_openocd/bin/openocd_cmd.bat" -s "C:/Users/Administrator/.platformio/platforms/AgRV/etc" -c "variable ADAPTER_SPEED 10000" -c "variable ADAPTER cmsis-dap" -f agrv2k.cfg -c "halt" -c "mem2array M 32 0x20000ed8 4" -c "puts \"RAW0=0x[format %%06x $M(0)]\"" -c "puts \"RAW1=0x[format %%06x $M(1)]\"" -c "puts \"RAW2=0x[format %%06x $M(2)]\"" -c "puts \"RAW3=0x[format %%06x $M(3)]\"" -c "mem2array S 32 0x20000f10 1" -c "puts \"STAGE=[format %%d $S(0)]\"" -c "resume" -c "shutdown"

@@ -20,7 +20,10 @@ drv_resp_t drv8316_xfer(int read, uint8_t addr, uint8_t data)
 
   // Single-phase SPI_Send sends exactly 2 bytes (16 clocks) without phase-1 clock doubling
   SPI_Send(SPI0, 2, w);
-  delay_ns(500);                     // spi_mode_wrap latch trails hard-SPI DONE
+  // Two jobs in one wait: (a) the bridge latches RXDATA after the pipeline drains
+  // (DEPTH 32 + tail ~= 440ns), and (b) DRV8316 requires nSCS to stay HIGH for
+  // >= 400ns (tHI_nSCS) between frames, otherwise the next frame is ignored.
+  delay_ns(1000);
 
   uint16_t resp = (uint16_t)(SPIW_RXDATA0 & 0xFFFFu);
   r.stat = (uint8_t)(resp >> 8);

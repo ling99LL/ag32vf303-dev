@@ -5,9 +5,11 @@
 #include "pwm3ph.h"
 
 #define TWO_PI_F 6.28318530718f
+#define PI_F 3.14159265359f
 #define FOC_LUT_SIZE 256
 
 foc_params_t g_foc;
+float g_align_delta;   // 对齐方向探测的 raw 电角度差（rad），诊断用
 
 static float s_sin_lut[FOC_LUT_SIZE + 1];
 static mt6701_sample_t s_angle;
@@ -16,6 +18,8 @@ static int32_t s_angle_q14;
 static int32_t s_iq_q12;
 static uint32_t s_crc_errors;
 static uint16_t s_isr_div;
+static float   s_raw_e_filt;   // 低通后的电角度（换向用，见 foc_step_isr）
+static uint8_t s_raw_e_init;
 
 static void foc_lut_init(void)
 {
@@ -53,6 +57,12 @@ void foc_init(uint16_t pole_pairs)
   g_foc.sensor_direction = 1;
   g_foc.torque_q = 0;
   g_foc.brake = 0;
+  // 换向角低通：1/64 -> 噪声衰减约 0.088 倍，滞后 1.6 ms。设 1.0 可完全关掉
+  // （串口 'q' 键循环切换，用于 A/B 对比）。
+  g_foc.angle_filt_alpha = 1.0f / 64.0f;
+  g_foc.comm_override = 0;      // 默认走编码器换向；motion 层按需接管
+  g_foc.comm_angle_e = 0.0f;
+  s_raw_e_init = 0;
 }
 
 static int32_t clamp_i32(int32_t v, int32_t lim)
@@ -125,7 +135,15 @@ void foc_align_sensor(void)
   float delta = probe_raw - g_foc.zero_electric_angle;
   while (delta < 0.0f)      delta += TWO_PI_F;
   while (delta >= TWO_PI_F) delta -= TWO_PI_F;
-  g_foc.sensor_direction = (delta < TWO_PI_F * 0.25f || delta > TWO_PI_F * 0.75f) ? 1 : -1;
+  // ⚠ 必须用"中心 +-45 度"窗口判定，不能用 90/270 度做边界。
+  //   传感器正向时 delta 恰好 = +90 度，反向时恰好 = 270 度(=-90 度)。
+  //   旧写法 "delta < 90 || delta > 270" 把判定边界正好压在真实值上，
+  //   一点点噪声就会让方向在每次上电时随机翻转 —— 实测 dir 在 +1/-1 之间
+  //   交替，翻到错的那次闭环变成正反馈，电机原地剧烈抖动而不是转动。
+  //   现在：delta 落在 (45,135) 度 -> +1；落在 (225,315) 度 -> -1。
+  g_align_delta = delta;
+  g_foc.sensor_direction =
+      (delta > TWO_PI_F * 0.125f && delta < TWO_PI_F * 0.375f) ? 1 : -1;
 }
 
 // Voltage-mode FOC step (runs in the GPTIMER0 update ISR = PWM valley):
@@ -155,7 +173,42 @@ void foc_step_isr(void)
   // 3. electrical angle with calibrated zero-offset
   float raw_e = TWO_PI_F * (float)(((uint32_t)s_angle.angle * g_foc.pole_pairs) & 0x3FFFu)
                 / 16384.0f;
-  float ang_e = (raw_e - g_foc.zero_electric_angle) * (float)g_foc.sensor_direction;
+  //
+  // ⚠ 换向角低通滤波 —— 闭环抖动的直接成因在这里。
+  //
+  //    闭环时 ang_e 直接由 encoder 读数算出，于是编码器的噪声/量化误差被
+  //    **乘以极对数(7)** 后直接调制电压矢量：实测闭环中机械角高频抖动
+  //    std=60 raw，折合电角度 ±9.2°，等于每拍都在晃电压矢量的方向 → 真实
+  //    的转矩纹波 → 机械抖动 → 编码器读到的噪声更大（正反馈）。
+  //    开环没有这条通道（角度来自内部累加器，天然光滑），所以实测只有
+  //    ±3.4~4.9% 的速度波动，而闭环有 ±15%，且**降低 kp 反而更抖**
+  //    （kp=2 → 217 raw 峰峰；kp=0.5 → 425 raw 峰峰），证明不是"P 项放大
+  //    噪声"，而是换向通道本身。
+  //
+  //    在电角度域做一阶低通即可切断这个环。取 alpha=1/64：噪声衰减
+  //    sqrt(alpha/2) ≈ 0.088 倍，滞后约 64 拍 = 1.6 ms，在 0.05 rev/s 下
+  //    只折合 1.3 raw 机械滞后，可以忽略。
+  {
+    float a = g_foc.angle_filt_alpha;
+    if (!(a < 1.0f)) {              // a >= 1 或 NaN：直通（保留 A/B 能力）
+      s_raw_e_filt = raw_e;
+      s_raw_e_init = 1;
+    } else if (!s_raw_e_init) {
+      s_raw_e_filt = raw_e;
+      s_raw_e_init = 1;
+    } else {
+      float d = raw_e - s_raw_e_filt;
+      while (d >  PI_F) d -= TWO_PI_F;   // 跨圈短路：走最短路径
+      while (d < -PI_F) d += TWO_PI_F;
+      s_raw_e_filt += a * d;
+    }
+  }
+  float ang_e = (s_raw_e_filt - g_foc.zero_electric_angle) * (float)g_foc.sensor_direction;
+  // 混合换向接管点：motion 层每拍写入 comm_angle_e 并置 comm_override。
+  // 关闭时这一行不执行，行为与从前逐拍一致（可随时用串口 'y' 做 A/B）。
+  if (g_foc.comm_override) {
+    ang_e = g_foc.comm_angle_e;
+  }
   while (ang_e < 0.0f) ang_e += TWO_PI_F;
   while (ang_e >= TWO_PI_F) ang_e -= TWO_PI_F;
 
@@ -200,3 +253,10 @@ void foc_step_isr(void)
 int32_t foc_last_angle(void) { return s_angle_q14; }
 int32_t foc_last_iq(void)    { return s_iq_q12; }
 uint32_t foc_crc_errors(void){ return s_crc_errors; }
+
+void foc_last_currents(int16_t *a, int16_t *b, int16_t *c)
+{
+  if (a) *a = s_ia;
+  if (b) *b = s_ib;
+  if (c) *c = s_ic;
+}

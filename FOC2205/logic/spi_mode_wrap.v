@@ -35,7 +35,24 @@
 `timescale 1ns/1ps
 
 // One mode-1 bridge. f_* are the raw MCU SPI function signals.
-module spi_mode1_bridge (
+//
+// DEPTH sets the nSCS->SCLK lead time at the pad: DEPTH * 10ns (bus clock 100MHz).
+// The two slaves need DIFFERENT leads, so DEPTH is a parameter:
+//   DRV8316C (bridge 0): tSU_nSCS = 300ns min -> DEPTH 32 = 320ns
+//   MT6701   (bridge 1): T_H (CSN low -> CLK high) = 100ns -> DEPTH 12 = 120ns
+// (Verified on real hardware: at DEPTH 12 the DRV8316 answers with a shifted /
+//  corrupted frame because nSCS is not settled before the first SCLK edge.)
+module spi_mode1_bridge #(
+  parameter DEPTH = 12,
+  // 0 = capture MISO on the falling SCK edge (SPI mode 1). DRV8316C needs this:
+  // its datasheet states data propagates on the rising edge and is captured on
+  // the falling edge.
+  // 1 = capture on the rising SCK edge. MT6701 SSI needs this: it updates DO on
+  // the falling edge, so a falling-edge capture misses the first bit and the
+  // entire 24-bit frame comes out shifted right by one (verified on hardware:
+  // the captured frame only passes CRC6 after a left shift by one).
+  parameter CAP_RISE = 0
+) (
   input             clock,
   input             resetn,
   input             f_sck,        // raw SCK (mode 0, idle low)
@@ -51,7 +68,6 @@ module spi_mode1_bridge (
   output reg [31:0] rxdata,
   output reg        done_pulse
 );
-  localparam DEPTH = 12;           // 12 * 10ns = 120ns pipeline
 
   wire frame   = f_csn_en & ~f_csn & gate;
   wire sck_raw = f_sck & frame;
@@ -89,7 +105,8 @@ module spi_mode1_bridge (
   assign sck_o  = sck_pipe[DEPTH-1];
   assign mosi_o = mosi_pipe[DEPTH-1];
 
-  // MISO: 2FF synchronize, capture on delayed SCK falling edge
+  // MISO: 2FF synchronize, capture on the selected delayed SCK edge
+  wire cap_edge = CAP_RISE ? (sck_o & ~sck_o_d) : (~sck_o & sck_o_d);
   always @ (posedge clock or negedge resetn) begin
     if (!resetn) begin
       miso_sync <= 2'b0;
@@ -102,7 +119,7 @@ module spi_mode1_bridge (
       frame_d   <= frame;
       if (frame & ~frame_d) begin
         rx_shift <= 32'b0;               // clear at frame start
-      end else if (~sck_o & sck_o_d) begin
+      end else if (cap_edge) begin
         rx_shift <= {rx_shift[30:0], miso_sync[1]};
       end
     end
@@ -189,7 +206,7 @@ module spi_mode_wrap (
   assign spi1_csn_go = spi1_csn_g_out_en ? spi1_csn_g_out_data : 1'b1;
   assign spi1_csn_g_in = spi1_csn_go;
 
-  spi_mode1_bridge bridge0 (
+  spi_mode1_bridge #(.DEPTH(32)) bridge0 (
     .clock      (clock),
     .resetn     (resetn),
     .f_sck      (spi0_sck_f_out_data),
@@ -206,7 +223,20 @@ module spi_mode_wrap (
     .done_pulse (done0)
   );
 
-  spi_mode1_bridge bridge1 (
+  // MT6701 SSI is mode 0, not mode 1: DO goes valid right after CSN falls, so
+  // the first bit must be sampled on the first RISING edge. A falling-edge
+  // capture (mode 1) loses D23 - proven with a 32-clock capture that returned
+  // 0xd01415ff: 24 data bits shifted right by one, followed by all-ones (DO
+  // released). The capture point sits DEPTH(12) = 120ns after the rising edge,
+  // which must stay below half an SCK period - hence SPI1 runs at 3.125MHz
+  // (160ns half period), not 12.5MHz (40ns, which overran the falling edge).
+  // MT6701 SSI: sampled on the falling SCK edge (mode 1) - verified on hardware.
+  // The clock rate matters: at 12.5MHz the half period is only 40ns, and after
+  // the chip's DO delay plus this bridge's 2-stage synchroniser (20ns) there is
+  // almost no margin left, so frames came back bit-corrupted and failed CRC6.
+  // At 3.125MHz (160ns half period) the frame is clean: angle + Mg + CRC6 pass.
+  // Do not raise SPI1 back to 12.5MHz without re-checking CRC errors.
+  spi_mode1_bridge #(.DEPTH(12), .CAP_RISE(0)) bridge1 (
     .clock      (clock),
     .resetn     (resetn),
     .f_sck      (spi1_sck_f_out_data),

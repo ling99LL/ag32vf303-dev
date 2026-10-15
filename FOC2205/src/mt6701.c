@@ -1,5 +1,8 @@
 #include "mt6701.h"
 
+// Last raw 24-bit frame, exposed for offline bit-alignment analysis.
+uint32_t g_mt_last_raw;
+
 void mt6701_init(void)
 {
   mt_csn_high();
@@ -19,14 +22,20 @@ uint8_t mt6701_crc6(uint32_t data18)
       crc ^= 0x43u;
     }
   }
-  return crc;
+  // 0x43 has bit6 set; that bit is shifted out on the next iteration but
+  // survives in the final value, so mask back to 6 bits before comparing.
+  // Without this the CRC never matches and every frame looks corrupt.
+  return (uint8_t)(crc & 0x3Fu);
 }
 
 int mt6701_read(mt6701_sample_t *s)
 {
   // CSN low -> >=100ns setup -> 24 clocks -> >=0.5*TCLK -> CSN high
+  // The 1us (not 150ns) setup is deliberate: MT6701 leaves DO at Hi-Z until it
+  // starts driving, and the 200k pull-up makes the first sampled bit read as 1,
+  // shifting the whole frame right by one. Verified on hardware.
   mt_csn_low();
-  delay_ns(150);
+  delay_us(1);
 
   // Single-phase SPI_Send: sends exactly 3 bytes (24 clocks), avoiding 48-clock overflow
   SPI_Send(SPI1, 3, 0x000000u);
@@ -36,6 +45,7 @@ int mt6701_read(mt6701_sample_t *s)
   delay_ns(500);   // spi_mode_wrap latches RXDATA ~250ns after the hard SPI DONE
 
   uint32_t frame = SPIW_RXDATA1 & 0xFFFFFFu;
+  g_mt_last_raw = frame;
 
   s->angle = (uint16_t)(frame >> 10);
   s->mg    = (uint8_t)((frame >> 6) & 0x0Fu);

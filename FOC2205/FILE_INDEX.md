@@ -15,6 +15,10 @@
 |---|---|---|---|
 | `FILE_INDEX.md` | 文档 | 本索引 | 索引、文件清单、用途 |
 | `README.md` | [文档] | 工程主文档：芯片/磁编/驱动参数总表、目录结构、构建命令（实测通过）、文档与审查链接、上板记录（待填） | 主文档、构建、上板 |
+| `CONTEXT.md` | [文档] | 力反馈旋钮、运动动作、保持态、力矩释放与动作残差的领域术语表 | SmartKnob、术语、保持态、残差 |
+| `docs/adr/0001-module-delivery-boundary.md` | [文档] | 首版交付边界：可嵌入力反馈旋钮模块，不包含独立终端外壳与应用 | ADR、模块、交付边界 |
+| `docs/adr/0002-module-control-and-host-interface.md` | [文档] | 模块本地控制与保护，UART TTL 115200 连接宿主和电脑上位机；故障释放后显式恢复至无输出待命 | ADR、UART、宿主、故障恢复 |
+| `docs/basic-motion-acceptance.md` | [文档] | 基础运动验收：首轮开环 3/6/15 rpm、正反各实际转满 5 圈、各先通过 1 次；通过判据已确认，六项待实测；停止释放、恢复后待命 | 验收、开环、闭环、释放、待命 |
 | `platformio.ini` | [源] | 构建配置：env `foc2205`（release），`logic_dir = logic` + `ip_name = analog_ip`（用户逻辑目录）、`AGRV2KQ32`、烧录 `cmsis-dap-openocd`、monitor COM26@115200 | 构建、环境、logic_dir、烧录 |
 | `foc2205.ve` | [源] | CPLD 引脚映射（v6.1：PIN_14=MT_CS、PIN_5=nSLEEP、PIN_7/8/9=INH、PIN_28=INL_ALL、PIN_10/11/12=电流采样、PIN_22/23=BRK/DO…）。**改动后必须** prelogic + Quartus + Supra + buildlogic + 重烧 | 引脚映射、ve、改脚、logic |
 

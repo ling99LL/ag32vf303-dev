@@ -1,0 +1,10 @@
+# ===== FOC2205 项目内忽略规则 =====
+# 串口抓取日志：调参时每次运行都会生成，属临时产物，不入库
+log_*.txt
+bootlog_*.txt
+ui_check*.txt
+ui_check2.txt
+
+# 上位机/工具运行残留
+tools/__pycache__/
+*.pyc

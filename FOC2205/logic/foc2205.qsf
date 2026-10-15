@@ -22,6 +22,11 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "09:37:04  JANUARY 04, 20
 set_global_assignment -name LAST_QUARTUS_VERSION "13.0 SP1"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY "./quartus_logs"
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+# 本机 Quartus 13.0sp1 的并行综合子进程会以 0xC0000409 fast-fail 退出，
+# 导致 quartus_map 报 "5 partitions did not finish parallel synthesis" 且 db 不提交
+# （后续 quartus_eda 就报 "Run Analysis and Synthesis first"）。关掉并行综合即可。
+# 此行位于 pio 段之外，prelogic 增量更新时会保留。
+set_global_assignment -name PARALLEL_SYNTHESIS OFF
 set_global_assignment -name FLOW_ENABLE_IO_ASSIGNMENT_ANALYSIS ON
 #set_global_assignment -name SMART_RECOMPILE ON
 
@@ -658,6 +663,7 @@ set_location_assignment -to resetn_out            LCCOMB_X58_Y5_N6
 set_instance_assignment -name GLOBAL_SIGNAL GLOBAL_CLOCK -to sys_resetn
 
 set_global_assignment -name EDA_MAINTAIN_DESIGN_HIERARCHY PARTITION_ONLY -section_id eda_simulation
+set_global_assignment -name VERILOG_FILE "../../../../.platformio/packages/tool-agrv_logic/etc/arch/rodinia/alta_sim.v"
 set_global_assignment -name PARTITION_COLOR 52377 -section_id macro_inst_gen_per_0__gen_adc_adc_inst_adc_inst -tag alta_auto
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id macro_inst_gen_per_0__gen_adc_adc_inst_adc_inst -tag alta_auto
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id macro_inst_gen_per_0__gen_adc_adc_inst_adc_inst -tag alta_auto
