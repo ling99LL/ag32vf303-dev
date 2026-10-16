@@ -18,13 +18,26 @@ drv_resp_t drv8316_xfer(int read, uint8_t addr, uint8_t data)
   drv_resp_t r;
   uint16_t w = make_frame(read, addr, data);
 
+  // SPIW_STATUS is sticky and is cleared by an RXDATA read. Clear a leftover
+  // completion from a previously timed-out/error transfer before starting a
+  // new frame, otherwise the check below could accept stale RXDATA.
+  (void)SPIW_RXDATA0;
+
   // Single-phase SPI_Send sends exactly 2 bytes (16 clocks) without phase-1 clock doubling
-  SPI_Send(SPI0, 2, w);
+  if (!app_spi_send(SPI0, 2, w)) {
+    r.stat = r.data = 0xffu;
+    return r;
+  }
   // Two jobs in one wait: (a) the bridge latches RXDATA after the pipeline drains
   // (DEPTH 32 + tail ~= 440ns), and (b) DRV8316 requires nSCS to stay HIGH for
   // >= 400ns (tHI_nSCS) between frames, otherwise the next frame is ignored.
   delay_ns(1000);
 
+  uint32_t status = SPIW_STATUS;
+  if (!(status & 1u) || (status & SPIW_ERROR0)) {
+    r.stat = r.data = 0xffu;
+    return r;
+  }
   uint16_t resp = (uint16_t)(SPIW_RXDATA0 & 0xFFFFu);
   r.stat = (uint8_t)(resp >> 8);
   r.data = (uint8_t)(resp & 0xFFu);
@@ -37,7 +50,7 @@ drv_resp_t drv8316_write_reg(uint8_t addr, uint8_t data) { return drv8316_xfer(0
 void drv8316_clear_faults(void)
 {
   // Rewrites CTRL2 with its current intended value + CLR_FLT (W1C). This is
-  // only called from drv8316_init() while INLx is still LOW, so the PWM_MODE
+  // called during init or checked recovery while INLx is LOW, so the PWM_MODE
   // field inside stays compliant with the "INLx low when touching PWM_MODE"
   // rule; never call it for a 6x->3x transition.
   drv8316_write_reg(DRV_REG_CTRL2, DRV_VAL_CTRL2 | 0x01); // CLR_FLT = W1C, self-clears

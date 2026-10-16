@@ -34,16 +34,27 @@ int mt6701_read(mt6701_sample_t *s)
   // The 1us (not 150ns) setup is deliberate: MT6701 leaves DO at Hi-Z until it
   // starts driving, and the 200k pull-up makes the first sampled bit read as 1,
   // shifting the whole frame right by one. Verified on hardware.
+  // RXDATA reads clear the bridge's sticky DONE bit; discard any completion left
+  // by a previous failed transfer before opening this frame.
+  (void)SPIW_RXDATA1;
   mt_csn_low();
   delay_us(1);
 
   // Single-phase SPI_Send: sends exactly 3 bytes (24 clocks), avoiding 48-clock overflow
-  SPI_Send(SPI1, 3, 0x000000u);
+  if (!app_spi_send(SPI1, 3, 0x000000u)) {
+    mt_csn_high();
+    s->crc_ok = 0;
+    return 0;
+  }
 
-  delay_ns(150);   // last CLK low to CSN high (>= 40ns required)
+  // Hard SPI DONE precedes the bridge's last pad edge by up to 120ns.
+  // Allow that drain plus >=160ns (half of 3.125MHz TCLK) before releasing CSN.
+  delay_ns(500);
   mt_csn_high();
   delay_ns(500);   // spi_mode_wrap latches RXDATA ~250ns after the hard SPI DONE
 
+  uint32_t status = SPIW_STATUS;
+  if (!(status & 2u) || (status & SPIW_ERROR1)) { s->crc_ok = 0; return 0; }
   uint32_t frame = SPIW_RXDATA1 & 0xFFFFFFu;
   g_mt_last_raw = frame;
 

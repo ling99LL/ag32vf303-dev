@@ -1,5 +1,4 @@
 @echo off
-rem FOC2205 - Supra place and route: simulation\modelsim\foc2205.vo -> foc2205.bin
-rem Run from FOC2205\logic after build_steps.bat.
-cd /d "%~dp0"
-"C:\Users\Administrator\.platformio\packages\tool-agrv_logic\bin\af_cmd.bat" -f af_run.tcl
+setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0run_supra.ps1"
+exit /b %ERRORLEVEL%

@@ -8,3 +8,10 @@ ui_check2.txt
 # 上位机/工具运行残留
 tools/__pycache__/
 *.pyc
+
+# Validation manifest is tied to local Quartus databases.
+logic/quartus_validated.json
+experiments/tests/build/
+experiments/logs/
+
+logic/logic_log.txt

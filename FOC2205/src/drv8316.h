@@ -1,4 +1,4 @@
-// drv8316.h — DRV8316CRRGFR SPI driver (16-clock frames @6.25MHz)
+// drv8316.h — DRV8316CRRGFR SPI driver (16-clock frames @3.125MHz)
 //
 // SDI frame (MSB first): B15=W (0=write, 1=read), B14:9=A[5:0], B8=even parity
 // over the other 15 bits, B7:0=D[7:0].  SDO: [15:8]=STAT, [7:0]=read data.

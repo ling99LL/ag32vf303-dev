@@ -26,7 +26,6 @@ set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 # 导致 quartus_map 报 "5 partitions did not finish parallel synthesis" 且 db 不提交
 # （后续 quartus_eda 就报 "Run Analysis and Synthesis first"）。关掉并行综合即可。
 # 此行位于 pio 段之外，prelogic 增量更新时会保留。
-set_global_assignment -name PARALLEL_SYNTHESIS OFF
 set_global_assignment -name FLOW_ENABLE_IO_ASSIGNMENT_ANALYSIS ON
 #set_global_assignment -name SMART_RECOMPILE ON
 
@@ -52,7 +51,6 @@ set_global_assignment -name AUTO_OPEN_DRAIN_PINS OFF
 # ==================
 set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 1
 set_global_assignment -name ROUTING_BACK_ANNOTATION_MODE OFF
-set_global_assignment -name OPTIMIZE_HOLD_TIMING "IO PATHS AND MINIMUM TPD PATHS"
 set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
 set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL MAXIMUM
 set_global_assignment -name PLACEMENT_EFFORT_MULTIPLIER 10
@@ -664,6 +662,16 @@ set_instance_assignment -name GLOBAL_SIGNAL GLOBAL_CLOCK -to sys_resetn
 
 set_global_assignment -name EDA_MAINTAIN_DESIGN_HIERARCHY PARTITION_ONLY -section_id eda_simulation
 set_global_assignment -name VERILOG_FILE "../../../../.platformio/packages/tool-agrv_logic/etc/arch/rodinia/alta_sim.v"
+
+
+
+
+
+
+
+set_global_assignment -name PARALLEL_SYNTHESIS OFF
+set_global_assignment -name OPTIMIZE_HOLD_TIMING "ALL PATHS"
+
 set_global_assignment -name PARTITION_COLOR 52377 -section_id macro_inst_gen_per_0__gen_adc_adc_inst_adc_inst -tag alta_auto
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id macro_inst_gen_per_0__gen_adc_adc_inst_adc_inst -tag alta_auto
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id macro_inst_gen_per_0__gen_adc_adc_inst_adc_inst -tag alta_auto

@@ -1,0 +1,32 @@
+import time
+from pathlib import Path
+import serial
+s = serial.Serial('COM26', 115200, timeout=.05, write_timeout=.5)
+buf = b''
+t0 = time.time()
+while time.time() - t0 < 12:
+    s.write(b'?')
+    time.sleep(.15)
+    d = s.read(8192)
+    if d:
+        buf += d
+        if buf.count(b'#FOC,') >= 2:
+            break
+s.write(b'F')
+t1 = time.time()
+while time.time() - t1 < 3:
+    s.write(b'?')
+    time.sleep(.2)
+    d = s.read(8192)
+    if d: buf += d
+s.close()
+out = Path(r'C:/Users/Administrator/Documents/AG32/FOC2205/experiments/logs/powered-20261017/stray-walktrip-F.txt')
+text = buf.decode('utf-8', 'replace')
+out.write_text(text, encoding='utf-8')
+for line in text.splitlines():
+    if not line.startswith(('#FOC,', 'isr=')):
+        print(line)
+print('--- last frame ---')
+for line in reversed(text.splitlines()):
+    if line.startswith('#FOC,'):
+        print(line[:200]); break

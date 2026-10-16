@@ -28,7 +28,8 @@
 // and delivered to the MCU over APB at 0x60007000:
 //   0x00 SPIW0_RXDATA (RO)  [15:0] = bridge-0 frame, bit15 = first bit
 //   0x04 SPIW1_RXDATA (RO)  [23:0] = bridge-1 frame, bit23 = first bit
-//   0x08 SPIW_STATUS  (RO)  bit0/1 = frame-done sticky, cleared on RXDATA read
+//   0x08 SPIW_STATUS  (RO)  bit0/1 = frame-done sticky, bit8/9 = bad-length
+//                            sticky; all four flags clear on RXDATA read
 // Firmware: run the hard SPI frame (dummy TX), wait DONE + ~500ns (the latch
 // trails the hard SPI DONE by up to ~250ns), then read RXDATA.
 
@@ -44,13 +45,11 @@
 //  corrupted frame because nSCS is not settled before the first SCLK edge.)
 module spi_mode1_bridge #(
   parameter DEPTH = 12,
+  parameter FRAME_BITS = 24,
   // 0 = capture MISO on the falling SCK edge (SPI mode 1). DRV8316C needs this:
   // its datasheet states data propagates on the rising edge and is captured on
   // the falling edge.
-  // 1 = capture on the rising SCK edge. MT6701 SSI needs this: it updates DO on
-  // the falling edge, so a falling-edge capture misses the first bit and the
-  // entire 24-bit frame comes out shifted right by one (verified on hardware:
-  // the captured frame only passes CRC6 after a left shift by one).
+  // 1 = optional rising-edge capture. Both current instances select 0.
   parameter CAP_RISE = 0
 ) (
   input             clock,
@@ -66,7 +65,8 @@ module spi_mode1_bridge #(
   output            mosi_o,
   output            csn_o,
   output reg [31:0] rxdata,
-  output reg        done_pulse
+  output reg        done_pulse,
+  output reg        error_pulse
 );
 
   wire frame   = f_csn_en & ~f_csn & gate;
@@ -77,6 +77,7 @@ module spi_mode1_bridge #(
   reg             mosi_reg;
   reg             sck_raw_d;
   reg [31:0]      rx_shift;
+  reg [5:0]       bit_count;
   reg [1:0]       miso_sync;
   reg             sck_o_d;
   reg [4:0]       tail;
@@ -112,6 +113,7 @@ module spi_mode1_bridge #(
       miso_sync <= 2'b0;
       sck_o_d   <= 1'b0;
       rx_shift  <= 32'b0;
+      bit_count <= 6'b0;
       frame_d   <= 1'b0;
     end else begin
       miso_sync <= {miso_sync[0], miso_i};
@@ -119,8 +121,10 @@ module spi_mode1_bridge #(
       frame_d   <= frame;
       if (frame & ~frame_d) begin
         rx_shift <= 32'b0;               // clear at frame start
+        bit_count <= 6'b0;
       end else if (cap_edge) begin
         rx_shift <= {rx_shift[30:0], miso_sync[1]};
+        if (bit_count != 6'h3f) bit_count <= bit_count + 1'b1;
       end
     end
   end
@@ -140,8 +144,10 @@ module spi_mode1_bridge #(
     if (!resetn) begin
       rxdata     <= 32'b0;
       done_pulse <= 1'b0;
+      error_pulse <= 1'b0;
     end else begin
       done_pulse <= frame_end;
+      error_pulse <= frame_end && (bit_count != FRAME_BITS);
       if (frame_end) begin
         rxdata <= rx_shift;
       end
@@ -200,13 +206,15 @@ module spi_mode_wrap (
 
   wire [31:0] rxdata0, rxdata1;
   wire        done0, done1;
+  wire        error0, error1;
   reg         done0_sticky, done1_sticky;
+  reg         error0_sticky, error1_sticky;
 
   // MT6701 pad CSN: firmware-controlled GPIO pass-through, inactive = high
   assign spi1_csn_go = spi1_csn_g_out_en ? spi1_csn_g_out_data : 1'b1;
   assign spi1_csn_g_in = spi1_csn_go;
 
-  spi_mode1_bridge #(.DEPTH(32)) bridge0 (
+  spi_mode1_bridge #(.DEPTH(32), .FRAME_BITS(16), .CAP_RISE(0)) bridge0 (
     .clock      (clock),
     .resetn     (resetn),
     .f_sck      (spi0_sck_f_out_data),
@@ -220,23 +228,17 @@ module spi_mode_wrap (
     .mosi_o     (spi0_mosi_o),
     .csn_o      (spi0_csn_o),
     .rxdata     (rxdata0),
-    .done_pulse (done0)
+    .done_pulse (done0),
+    .error_pulse(error0)
   );
 
-  // MT6701 SSI is mode 0, not mode 1: DO goes valid right after CSN falls, so
-  // the first bit must be sampled on the first RISING edge. A falling-edge
-  // capture (mode 1) loses D23 - proven with a 32-clock capture that returned
-  // 0xd01415ff: 24 data bits shifted right by one, followed by all-ones (DO
-  // released). The capture point sits DEPTH(12) = 120ns after the rising edge,
-  // which must stay below half an SCK period - hence SPI1 runs at 3.125MHz
-  // (160ns half period), not 12.5MHz (40ns, which overran the falling edge).
   // MT6701 SSI: sampled on the falling SCK edge (mode 1) - verified on hardware.
   // The clock rate matters: at 12.5MHz the half period is only 40ns, and after
   // the chip's DO delay plus this bridge's 2-stage synchroniser (20ns) there is
   // almost no margin left, so frames came back bit-corrupted and failed CRC6.
   // At 3.125MHz (160ns half period) the frame is clean: angle + Mg + CRC6 pass.
   // Do not raise SPI1 back to 12.5MHz without re-checking CRC errors.
-  spi_mode1_bridge #(.DEPTH(12), .CAP_RISE(0)) bridge1 (
+  spi_mode1_bridge #(.DEPTH(12), .FRAME_BITS(24), .CAP_RISE(0)) bridge1 (
     .clock      (clock),
     .resetn     (resetn),
     .f_sck      (spi1_sck_f_out_data),
@@ -250,7 +252,8 @@ module spi_mode_wrap (
     .mosi_o     (),                      // unused
     .csn_o      (),                      // unused: pad CSN = spi1_csn_go
     .rxdata     (rxdata1),
-    .done_pulse (done1)
+    .done_pulse (done1),
+    .error_pulse(error1)
   );
 
   // ---- APB: RO registers ----
@@ -260,11 +263,21 @@ module spi_mode_wrap (
     if (!resetn) begin
       done0_sticky <= 1'b0;
       done1_sticky <= 1'b0;
+      error0_sticky <= 1'b0;
+      error1_sticky <= 1'b0;
     end else begin
-      if (rd_strobe & (paddr[3:2] == 2'd0)) done0_sticky <= 1'b0;
-      if (rd_strobe & (paddr[3:2] == 2'd1)) done1_sticky <= 1'b0;
+      if (rd_strobe & (paddr[3:2] == 2'd0)) begin
+        done0_sticky <= 1'b0;
+        error0_sticky <= 1'b0;
+      end
+      if (rd_strobe & (paddr[3:2] == 2'd1)) begin
+        done1_sticky <= 1'b0;
+        error1_sticky <= 1'b0;
+      end
       if (done0) done0_sticky <= 1'b1;
       if (done1) done1_sticky <= 1'b1;
+      if (error0) error0_sticky <= 1'b1;
+      if (error1) error1_sticky <= 1'b1;
     end
   end
 
@@ -272,7 +285,8 @@ module spi_mode_wrap (
     case (paddr[3:2])
       2'd0:    prdata = rxdata0;
       2'd1:    prdata = rxdata1;
-      2'd2:    prdata = {30'b0, done1_sticky, done0_sticky};
+      2'd2:    prdata = {22'b0, error1_sticky, error0_sticky, 6'b0,
+                         done1_sticky, done0_sticky};
       default: prdata = 32'b0;
     endcase
   end

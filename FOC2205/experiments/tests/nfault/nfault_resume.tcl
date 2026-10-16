@@ -1,0 +1,4 @@
+init
+halt
+resume
+shutdown

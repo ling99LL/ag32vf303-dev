@@ -9,12 +9,15 @@
 #define APP_IO_H
 
 #include "alta.h"
+#include "spi.h"
 
 // spi_mode_wrap APB register bank (see logic/spi_mode_wrap.v)
 #define SPIW_BASE     (0x60007000u)
 #define SPIW_RXDATA0  (*(volatile uint32_t *)(SPIW_BASE + 0x00)) // DRV8316 frame [15:0]
 #define SPIW_RXDATA1  (*(volatile uint32_t *)(SPIW_BASE + 0x04)) // MT6701 frame [23:0]
 #define SPIW_STATUS   (*(volatile uint32_t *)(SPIW_BASE + 0x08)) // bit0/1 frame-done sticky
+#define SPIW_ERROR0   (1u << 8) // bridge-0 frame length error
+#define SPIW_ERROR1   (1u << 9) // bridge-1 frame length error
 
 // MT6701 CSN on GPIO2 bit 0
 #define MT_CSN_GPIO   GPIO2
@@ -24,13 +27,14 @@
 #define DRV_SLP_GPIO  GPIO2
 #define DRV_SLP_BIT   GPIO_BIT1
 // DRV8316 INLA/B/C common enable on GPIO2 bit 2 (P0-3 fix: the three INLx
-// pins are tied together to PIN_28/JNTRST with a 10k pulldown — DAPLink's
-// 2-wire Compact-JTAG never touches nTRST, so debugging is unaffected).
+// pins are tied together to PIN_28/JNTRST with a 10k pulldown. A debug cable
+// driving nTRST low can conflict while INL is high; idle always drives it low.
 // LOW = PWM_MODE register change allowed and 3x mode reads Hi-Z; HIGH = 3x drive active.
 #define DRV_INL_GPIO  GPIO2
 #define DRV_INL_BIT   GPIO_BIT2
 
 void app_io_init(void);            // GPIO + AF + SPI0/SPI1 clocks and dividers
+int app_spi_send(SPI_TypeDef *spi, int bytes, uint32_t data);
 
 static inline void mt_csn_low(void)  { GPIO_SetLow (MT_CSN_GPIO, MT_CSN_BIT); }
 static inline void mt_csn_high(void) { GPIO_SetHigh(MT_CSN_GPIO, MT_CSN_BIT); }

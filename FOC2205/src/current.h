@@ -20,8 +20,9 @@ typedef struct
 
 extern current_cal_t g_cur_cal;
 
-void current_init(void);                 // channel setup + zero-offset calibration
+int  current_init(void);                 // 1 on valid zero calibration, 0 on ADC timeout/invalid offset
+int  current_calibrated(void);
 void current_trigger(void);              // start all three conversions (ISR use)
-void current_read_raw(int16_t *a, int16_t *b, int16_t *c); // wait EOC + subtract offsets
+int  current_read_raw(int16_t *a, int16_t *b, int16_t *c); // 1 on EOC, 0 on timeout
 
 #endif

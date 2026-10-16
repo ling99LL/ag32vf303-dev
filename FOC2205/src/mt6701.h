@@ -1,4 +1,4 @@
-// mt6701.h — MT6701QT-STD SSI angle reader (24-clock frame @12.5MHz)
+// mt6701.h — MT6701QT-STD SSI angle reader (24-clock frame @3.125MHz)
 //
 // Frame (MSB first): [23:10] = D[13:0] angle, [9:6] = Mg[3:0] status, [5:0] = CRC6
 //   Mg[2] = push pressed, Mg[1:0] = field strength (0 ok / 1 too strong / 2 too weak),

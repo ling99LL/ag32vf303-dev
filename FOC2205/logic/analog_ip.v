@@ -116,6 +116,8 @@ wire [2:0]           apb_pprot;
 wire                 apb_pready  = 1'b1;
 wire                 apb_pslverr = 1'b0;
 reg  [DATA_BITS-1:0] apb_prdata;
+wire                 apb_clock;
+wire                 dac_dout;
 
 assign apb_clock = bus_clock;
 ahb2apb #(ADDR_BITS, DATA_BITS) ahb2apb_inst(

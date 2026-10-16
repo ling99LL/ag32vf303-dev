@@ -1,8 +1,18 @@
 #include "pwm3ph.h"
 #include "gptimer.h"
 #include "interrupt.h"
+#include "app_io.h"
 
 static void (*s_update_isr)(void);
+volatile uint32_t g_pwm_release_diag[6];
+
+// Measured 2026-10-16: this GPTIMER raises BIF on the MOE 1->0 write itself,
+// even with INL low (driver Hi-Z) and nFAULT high, so every deliberate release
+// looked like "driver break". Keep the real event in software instead: latch a
+// flag that was already set before our own write, and mask the one our write
+// creates. A break during operation (MOE on) still trips through the ISR.
+static volatile int s_break_latch;
+static volatile int s_release_window;
 
 void pwm3ph_init(void)
 {
@@ -40,13 +50,63 @@ void pwm3ph_init(void)
 void pwm3ph_outputs(int on)
 {
   if (on) {
-    // D-6 fix: clear any transient break flag latched during power-up before enabling MOE
-    GPTIMER_ClearFlagBreak(GPTIMER0);
+    if (pwm3ph_faulted()) return;
     GPTIMER0->BDTR |= GPTIMER_BDTR_MOE;
     GPTIMER_EnableCounter(GPTIMER0);
   } else {
+    // A flag already set here is a real break event; remember it, because the
+    // MOE 1->0 write below sets BIF by itself on this part.
+    if (GPTIMER_IsActiveFlagBreak(GPTIMER0)) s_break_latch = 1;
+    s_release_window = 1;
     GPTIMER0->BDTR &= ~GPTIMER_BDTR_MOE;
+    GPTIMER_ClearFlagBreak(GPTIMER0);
+    s_release_window = 0;
   }
+}
+
+int pwm3ph_faulted(void)
+{
+  if (s_break_latch) return 1;
+  if (s_release_window) return 0;
+  return GPTIMER_IsActiveFlagBreak(GPTIMER0);
+}
+int pwm3ph_enabled(void) { return !!(GPTIMER0->BDTR & GPTIMER_BDTR_MOE); }
+void pwm3ph_ack_break(void)
+{
+  s_break_latch = 0;
+  GPTIMER_ClearFlagBreak(GPTIMER0);
+}
+void pwm3ph_release(void)
+{
+  int was_on = pwm3ph_enabled();
+  if (was_on) {
+    g_pwm_release_diag[0] = GPTIMER0->SR;
+    g_pwm_release_diag[3] = GPIO_GetValue(GPIO4, 0xff);
+    g_pwm_release_diag[5] = GPTIMER0->BDTR;
+  }
+  drv_inl_low();
+  if (was_on) g_pwm_release_diag[1] = GPTIMER0->SR;
+  pwm3ph_outputs(0);
+  if (was_on) {
+    g_pwm_release_diag[2] = GPTIMER0->SR;
+    g_pwm_release_diag[4] = GPIO_GetValue(GPIO4, 0xff);
+  }
+}
+void pwm3ph_prepare(void)
+{
+  pwm3ph_set(PWM3PH_ARR / 2, PWM3PH_ARR / 2, PWM3PH_ARR / 2);
+  GPTIMER_GenerateEventUpdate(GPTIMER0);
+  GPTIMER_ClearFlagUpdate(GPTIMER0);
+}
+int pwm3ph_arm(void)
+{
+  pwm3ph_release();
+  if (pwm3ph_faulted()) return 0;
+  pwm3ph_prepare();
+  pwm3ph_outputs(1);
+  drv_inl_high();
+  if (pwm3ph_faulted()) { pwm3ph_release(); return 0; }
+  return 1;
 }
 
 void pwm3ph_set(int32_t ccr_a, int32_t ccr_b, int32_t ccr_c)
@@ -63,7 +123,7 @@ void pwm3ph_set(int32_t ccr_a, int32_t ccr_b, int32_t ccr_c)
 
 static void pwm3ph_update_irq(void)
 {
-  GPTIMER0->SR &= ~GPTIMER_SR_UIF; // clear update flag (write-0-to-clear)
+  GPTIMER_ClearFlagUpdate(GPTIMER0);
   // P1-3 valley gate: at the underflow (valley) event CNT has just wrapped to
   // ~0 and counts up; at the overflow (peak) event CNT sits at ARR counting
   // down. Only the valley has all low-side switches on (valid current sense)
@@ -83,4 +143,5 @@ void pwm3ph_on_update(void (*isr)(void))
   plic_isr[GPTIMER0_IRQn] = pwm3ph_update_irq;
   INT_EnableIRQ(GPTIMER0_IRQn, 1);
   INT_EnablePLIC();
+  GPTIMER_EnableCounter(GPTIMER0); // acquisition continues with the power stage off
 }
