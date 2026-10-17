@@ -313,7 +313,7 @@ with serial.Serial(args.port, 115200, timeout=.02, write_timeout=.5) as ser, \
     print('P0 fw=%s up=%s st=%s ready=%s' % (last().get('fw'), last().get('up'),
                                              last().get('st'), last().get('ready')),
           flush=True)
-    if last().get('fw') != '20261017.1':
+    if last().get('fw') != '20261017.10':
         raise RuntimeError('unexpected firmware: %s' % last().get('fw'))
     dump_cfg('P0 cfg')
     oc_read('P0 clear')

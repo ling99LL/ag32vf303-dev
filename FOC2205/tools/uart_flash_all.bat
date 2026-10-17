@@ -10,17 +10,21 @@ rem
 rem AFTER THIS SCRIPT: remove the BOOT0 jumper and power cycle again, otherwise
 rem the board will keep entering the boot loader instead of running the firmware.
 rem
-rem Order matters: the program update must follow the logic update.
+rem Order matters: program first, logic LAST.  The program write erases the
+rem whole flash, so writing logic first would silently delete the bit stream.
 set TOOL=C:\Users\Administrator\.platformio\packages\tool-agrv_flashloader\bin\agrv32flash.exe
 set PROJ=C:\Users\Administrator\Documents\AG32\FOC2205
 
-echo ==== 1/2 writing CPLD bit stream ====
-"%TOOL%" -b 57600 -l "%PROJ%\logic\foc2205.bin" -v COM26
+echo ==== 1/2 writing MCU program ====
+"%TOOL%" -b 57600 -S 0x80000000 -w "%PROJ%\.pio\build\foc2205\foc2205.bin" -v COM26
 if errorlevel 1 goto fail
 
-echo ==== 2/2 writing MCU program ====
-"%TOOL%" -b 57600 -w "%PROJ%\.pio\build\foc2205\foc2205.bin" -v -R COM26
+echo ==== 2/2 writing CPLD bit stream ====
+"%TOOL%" -b 57600 -S 0x80034000 -l "%PROJ%\logic\foc2205.bin" -v COM26
 if errorlevel 1 goto fail
+
+rem Do not use -K/-M here: it compares the raw file against the generated
+rem 0x1100-byte decompressor + compressed layout and reports a false mismatch.
 
 echo ==== DONE: remove the BOOT0 jumper, then power cycle ====
 pause

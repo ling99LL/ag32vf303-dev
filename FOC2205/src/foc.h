@@ -30,6 +30,7 @@ typedef struct
   int32_t cur_ref_div;          // iq_ref = torque_q / cur_ref_div (Q12 -> LSB)
   float   cur_filt_alpha;       // LPF on id/iq feedback; (0,1], 1 = raw
   int32_t cur_v_cap;            // PI output clamp in modulation LSB (4096 = 100%)
+  int32_t cur_trip_lsb;         // runtime over-current threshold (ADC LSB)
 } foc_params_t;
 
 extern foc_params_t g_foc;
@@ -67,6 +68,10 @@ void foc_oc_get(foc_oc_t *out);
 // ---- inner current loop ----
 void foc_current_loop_enable(int on); // switch only from standby with outputs off
 int  foc_current_loop_enabled(void);
+// Runtime current limit for one motion mode. v_cap is modulation LSB where
+// 8192 = 100% of the normalized voltage vector; trip_lsb is ADC LSB.
+// Values below the safety floor are clipped; this is not a calibrated limiter.
+void foc_current_limit_set(int32_t trip_lsb, int32_t v_cap);
 void foc_last_dq(int16_t *d, int16_t *q); // filtered id/iq, LSB
 int32_t foc_last_iq_ref(void);            // latest iq reference (0 in voltage mode)
 

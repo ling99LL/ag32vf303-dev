@@ -37,10 +37,13 @@ class Status:
                     not 0 <= values['calst'] <= 9 or values['calpk'] < 0 or
                     values['calok'] not in (0, 1)):
                 return None
-            for key in 'ready aligned drvok encok adcok cal brk out mode'.split():
+            for key in 'ready aligned drvok encok adcok cal brk out'.split():
                 if values[key] not in (0, 1):
                     return None
-            if not 0 <= values['mask'] <= 7 or not 0 <= values['pct'] <= 20:
+            if values['mode'] not in (0, 1, 2):
+                return None
+            pct_max = 80 if values['mode'] == 2 else 20
+            if not 0 <= values['mask'] <= 7 or not 0 <= values['pct'] <= pct_max:
                 return None
             if not values.get('fw') or 'fault' not in values:
                 return None
@@ -110,6 +113,14 @@ class PanelState:
     def can_manual(self, now):
         return (self.fresh(now) and self.status['mode'] == 1 and
                 self.status['st'] == 1 and self.status['ready'] == 1)
+
+    def spin_active(self, now):
+        return (self.fresh(now) and self.status is not None and
+                self.status['mode'] == 2 and self.status['st'] == 1 and
+                self.status['ready'] == 1)
+
+    def can_spin_control(self, now):
+        return self.spin_active(now) or self.can_drive(now)
 
     def can_recover(self, now):
         return (self.fresh(now) and self.status['st'] == 3 and

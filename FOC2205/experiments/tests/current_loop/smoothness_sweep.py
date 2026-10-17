@@ -450,7 +450,7 @@ def main():
         say('P0 fw=%s up=%s st=%s out=%s ready=%s cl=%s ang=%s'
             % (f.get('fw'), f.get('up'), f.get('st'), f.get('out'),
                f.get('ready'), f.get('cl'), f.get('ang')))
-        if f.get('fw') != '20261017.1':
+        if f.get('fw') != '20261017.10':
             say('FATAL: unexpected firmware %s' % f.get('fw'))
             return
         if f.get('st') == '3' and not recover('pre'):

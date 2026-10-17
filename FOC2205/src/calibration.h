@@ -11,6 +11,6 @@ void calibration_set_rate(uint32_t hz);
 int calibration_active(void);
 int calibration_stage(void);
 uint32_t calibration_peak(void);
-#define CALIBRATION_PCT 3
+#define CALIBRATION_PCT 5
 #define CURRENT_TRIP_LSB 200
 #endif

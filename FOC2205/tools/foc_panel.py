@@ -16,6 +16,11 @@ from foc_protocol import PanelState, Status, STATE_NAMES
 
 POLL_MS = 100
 LOG_DIR = Path(__file__).resolve().parents[1] / 'experiments' / 'logs'
+SPIN_SPEEDS = ('0.05 圈/秒 (3 rpm)', '0.10 圈/秒 (6 rpm)',
+               '0.25 圈/秒 (15 rpm)', '1.00 圈/秒 (60 rpm)')
+SPIN_OPENLOOP_POWER_MAX = 40
+SPIN_SPEED_INFO = {text: (index + 1, rps) for index, (text, rps) in enumerate(zip(
+    SPIN_SPEEDS, (0.05, 0.10, 0.25, 1.00)))}
 
 
 def list_ports():
@@ -26,8 +31,8 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title('FOC2205 调试台 — 设备诊断 / 角度 / 控制')
-        root.geometry('1080x800')
-        root.minsize(1020, 760)
+        root.geometry('1120x960')
+        root.minsize(1040, 860)
         self.ser = None
         self.reader_thread = None
         self.stop_evt = threading.Event()
@@ -38,6 +43,7 @@ class App:
         self.last_summary = None
         self.timeout_stopped = False
         self.command_pending_until = 0.0
+        self.spin_stop_at = 0.0
         self.record_file = None
         self.record_writer = None
         self._build_ui()
@@ -122,6 +128,47 @@ class App:
         self.btn_cal.pack(side='left', padx=(8, 0))
         self.control_text = tk.StringVar(value='设备未就绪')
         ttk.Label(control, textvariable=self.control_text).pack(anchor='w', pady=(6,0))
+        spin = ttk.LabelFrame(right, text='无限旋转 SPIN', padding=10)
+        spin.pack(fill='x', pady=8)
+        row = ttk.Frame(spin)
+        row.pack(fill='x')
+        ttk.Label(row, text='方向').pack(side='left', padx=(0,6))
+        self.spin_dir = tk.IntVar(value=1)
+        self.spin_dir_buttons = []
+        for text, value in (('正向', 1), ('反向', -1)):
+            btn = ttk.Radiobutton(row, text=text, value=value, variable=self.spin_dir)
+            btn.pack(side='left', padx=(0,8))
+            self.spin_dir_buttons.append(btn)
+        ttk.Label(row, text='模式').pack(side='left', padx=(12,6))
+        self.spin_mode = tk.StringVar(value='closed')
+        self.spin_mode_buttons = []
+        for text, value in (('闭环', 'closed'), ('开环', 'open')):
+            btn = ttk.Radiobutton(row, text=text, value=value, variable=self.spin_mode,
+                                  command=self._spin_mode_changed)
+            btn.pack(side='left', padx=(0,8))
+            self.spin_mode_buttons.append(btn)
+        ttk.Label(row, text='速度').pack(side='left', padx=(12,6))
+        self.spin_speed = tk.StringVar(value='0.10 圈/秒 (6 rpm)')
+        self.spin_speed_box = ttk.Combobox(
+            row, width=20, state='readonly', textvariable=self.spin_speed,
+            values=SPIN_SPEEDS)
+        self.spin_speed_box.pack(side='left')
+        self.spin_speed_box.bind('<<ComboboxSelected>>', self._spin_speed_changed)
+        row = ttk.Frame(spin)
+        row.pack(fill='x', pady=(8,0))
+        ttk.Label(row, text='力度上限').pack(side='left', padx=(0,6))
+        self.spin_power = tk.IntVar(value=20)
+        self.spin_scale = tk.Scale(row, from_=10, to=80, resolution=10, length=190,
+                                   orient='horizontal', variable=self.spin_power,
+                                   font=('Microsoft YaHei UI', 9))
+        self.spin_scale.pack(side='left')
+        self.spin_scale.bind('<ButtonRelease-1>', lambda event: self._apply_spin_power())
+        self.btn_spin = ttk.Button(row, text='开始无限旋转', command=self._toggle_spin)
+        self.btn_spin.pack(side='left', padx=(10,8))
+        self.spin_status = tk.StringVar(value='待机')
+        ttk.Label(row, textvariable=self.spin_status).pack(side='left')
+        ttk.Label(spin, text='闭环最高 80%，开环最高 40%；主机 1 秒无命令自动减速释放。',
+                  foreground='#9a4e18', font=('Microsoft YaHei UI', 9)).pack(anchor='w', pady=(6,0))
         manual = ttk.LabelFrame(right, text='三相手动调试', padding=10)
         manual.pack(fill='x')
         ttk.Label(manual, text='调制幅度不代表电流限制。最后一次操作后 30 秒自动释放。',
@@ -178,6 +225,7 @@ class App:
         self.last_summary = None
         self.timeout_stopped = False
         self.command_pending_until = 0
+        self.spin_stop_at = 0.0
         self.rxq = queue.Queue()
         self.stop_evt = threading.Event()
         self.reader_thread = threading.Thread(target=self._reader, args=(port,self.stop_evt,self.rxq), daemon=True)
@@ -249,6 +297,10 @@ class App:
             allowed = self.model.can_recover(now)
         elif command.startswith(('x','w')):
             allowed = self.model.can_manual(now)
+        elif command in ('p', 'P'):
+            allowed = self.model.can_drive(now)
+        elif command[:1] in ('V', 'W', '#'):
+            allowed = self.model.can_spin_control(now)
         elif command == 'g' or command in ('s','?','f','d','h'):
             allowed = True
         else:
@@ -264,7 +316,8 @@ class App:
             return False
         if command != '?':
             self._log('TX '+command)
-        if command in ('a','A','m','r','R','z') or command.startswith(('x','w')):
+        if (command in ('a','A','m','r','R','z','p','P') or
+                command.startswith(('x','w','V','W','#'))):
             self.command_pending_until = now + 0.3
         return True
 
@@ -286,10 +339,57 @@ class App:
         if self.model.can_manual(time.monotonic()):
             self._send('w%d' % (self.pct.get()//5))
 
+    def _spin_speed_gear(self):
+        return SPIN_SPEED_INFO.get(self.spin_speed.get(), (2, 0.10))
+
+    def _spin_speed_changed(self, event=None):
+        gear, rps = self._spin_speed_gear()
+        if self.model.spin_active(time.monotonic()):
+            self._send('V%d' % gear)
+        self.spin_status.set(f'速度设定 {rps:.2f} 圈/秒 ({rps*60:.0f} rpm)')
+
+    def _spin_mode_changed(self):
+        is_open = self.spin_mode.get() == 'open'
+        mode = '开环' if is_open else '闭环'
+        self.spin_scale.configure(to=SPIN_OPENLOOP_POWER_MAX if is_open else 80)
+        if is_open and self.spin_power.get() > SPIN_OPENLOOP_POWER_MAX:
+            self.spin_power.set(SPIN_OPENLOOP_POWER_MAX)
+        self.spin_status.set(f'{mode}模式待启动')
+
+    def _apply_spin_power(self):
+        cap = SPIN_OPENLOOP_POWER_MAX if self.spin_mode.get() == 'open' else 80
+        pct = max(10, min(cap, int(round(self.spin_power.get() / 10.0)) * 10))
+        self.spin_power.set(pct)
+        if self.model.spin_active(time.monotonic()):
+            self._send('W%d' % (pct // 10))
+
+    def _toggle_spin(self):
+        now = time.monotonic()
+        if self.model.spin_active(now):
+            self._send('s')
+            self.spin_stop_at = now
+            self.spin_status.set('减速停止中…')
+            return
+        if not self.model.can_drive(now):
+            self._log('设备未就绪，未启动无限旋转')
+            return
+        gear, rps = self._spin_speed_gear()
+        cap = SPIN_OPENLOOP_POWER_MAX if self.spin_mode.get() == 'open' else 80
+        pct = max(10, min(cap, int(round(self.spin_power.get() / 10.0)) * 10))
+        self.spin_power.set(pct)
+        mode = 1 if self.spin_mode.get() == 'open' else 0
+        self._send('#%d' % mode)
+        self._send('V%d' % gear)
+        self._send('W%d' % (pct // 10))
+        self._send('p' if self.spin_dir.get() > 0 else 'P')
+        self.spin_stop_at = 0
+        self.spin_status.set(f"启动中：{'开环' if mode else '闭环'} {rps:.2f} 圈/秒，力度上限 {pct}%")
+
     def _enable_controls(self):
         now = time.monotonic()
         ready = self.ser is not None and self.model.can_drive(now)
         manual = self.ser is not None and self.model.can_manual(now)
+        spin = self.ser is not None and self.model.spin_active(now)
         pending = now < self.command_pending_until
         for button in self.drive_buttons:
             button.configure(state='normal' if ready and not pending else 'disabled')
@@ -299,6 +399,20 @@ class App:
             button.configure(state='normal' if manual and not pending else 'disabled')
         for button in self.pct_buttons:
             button.configure(state='normal' if (ready or manual) and not pending else 'disabled')
+        for button in self.spin_dir_buttons:
+            button.configure(state='normal' if ready and not pending else 'disabled')
+        for button in self.spin_mode_buttons:
+            button.configure(state='normal' if ready and not spin and not pending else 'disabled')
+        self.spin_speed_box.configure(
+            state='readonly' if (ready or spin) and not pending else 'disabled')
+        self.spin_scale.configure(
+            state='normal' if (ready or spin) and not pending else 'disabled')
+        if spin:
+            self.btn_spin.configure(state='normal', text='停止无限旋转')
+        elif ready and not pending:
+            self.btn_spin.configure(state='normal', text='开始无限旋转')
+        else:
+            self.btn_spin.configure(state='disabled', text='开始无限旋转')
         self.btn_recover.configure(state='normal' if self.ser and self.model.can_recover(now) and not pending else 'disabled')
         calibration_active = self.ser is not None and self.model.calibration_active(now)
         calibration_allowed = self.ser is not None and self.model.can_calibrate(now)
@@ -319,6 +433,7 @@ class App:
             var.set('--')
         self.fault_text.set('故障原因：等待设备状态')
         self.control_text.set('设备未就绪')
+        self.spin_status.set('待机')
         self.banner.configure(text='未连接',bg='#e8edf4',fg='#28374d')
         for i, button in enumerate(self.phase_buttons):
             button.configure(text=f"{'ABC'[i]} 关闭")
@@ -353,16 +468,34 @@ class App:
         self.fault_text.set('故障原因：'+status.fault_text)
         self.control_text.set(f"调制 q={v['vq']} Q12   误差={v['err']} raw   速度={v['vel']} raw/s")
         for i, button in enumerate(self.phase_buttons):
-            level = ('高' if v['mask']&(1<<i) else '低') if v['mode'] else '关闭'
+            level = ('高' if v['mask']&(1<<i) else '低') if v['mode'] == 1 else '关闭'
             button.configure(text=f"{'ABC'[i]} {level}")
-        if v['mode'] and v['pct'] in (5,10,15,20):
+        if v['mode'] == 1 and v['pct'] in (5,10,15,20):
             self.pct.set(v['pct'])
+        if v['mode'] == 2:
+            rpm = v['vel'] * 60.0 / 16384.0
+            is_open = bool(v.get('open'))
+            self.spin_mode.set('open' if is_open else 'closed')
+            self.spin_scale.configure(to=SPIN_OPENLOOP_POWER_MAX if is_open else 80)
+            if is_open and self.spin_power.get() > SPIN_OPENLOOP_POWER_MAX:
+                self.spin_power.set(SPIN_OPENLOOP_POWER_MAX)
+            if self.spin_stop_at and now - self.spin_stop_at < 2.5:
+                self.spin_status.set(f'减速停止中：{rpm:+.1f} rpm')
+            else:
+                self.spin_status.set(
+                    f"{'开环' if is_open else '闭环'}运行：{rpm:+.1f} rpm，力度上限 {v['pct']}%，vq={v['vq']}")
+        elif v['st'] == 1:
+            self.spin_status.set('其他动作运行中')
+        else:
+            self.spin_status.set('待机')
+            self.spin_stop_at = 0
         if v['st'] == 3:
             text, bg, fg = '故障锁存 · 功率输出已释放', '#fae4e6', '#972936'
             if not v['aligned']:
                 text += ' · 排除故障后重新启动完成标定'
         elif v['st'] == 1:
-            text, bg, fg = '手动调试运行中' if v['mode'] else '动作执行中', '#fff0cf', '#815000'
+            text, bg, fg = ('无限旋转运行中' if v['mode'] == 2 else
+                            '手动调试运行中' if v['mode'] == 1 else '动作执行中'), '#fff0cf', '#815000'
         elif status.drive_ready:
             text, bg, fg = '设备就绪 · 等待动作指令', '#dbf4e9', '#176249'
         else:
@@ -371,7 +504,7 @@ class App:
             text = '故障状态仍有 PWM 使能，请立即检查硬件'
         self.banner.configure(text=text,bg=bg,fg=fg)
         self.lbl_conn.configure(text=f'{self.ser.port} 通信正常')
-        summary = (v['st'],v['fault'],v['drvok'],v['encok'],v['cal'])
+        summary = (v['st'],v['mode'],v['fault'],v['drvok'],v['encok'],v['cal'])
         if summary != self.last_summary:
             self._log(f"状态：{STATE_NAMES[v['st']]}；{status.fault_text}")
             self.last_summary = summary

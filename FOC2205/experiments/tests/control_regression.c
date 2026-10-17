@@ -23,7 +23,7 @@ uint32_t GPIO_GetValue(GPIO_TypeDef *port, uint32_t mask)
   (void)port;
   return mask & 1u;
 }
-static int angle, crc_bad, adc_bad, break_fault, enabled, pwm_writes;
+static int angle, crc_bad, mg_bad, adc_bad, break_fault, enabled, pwm_writes;
 static int16_t cur_a = 11, cur_b = 22, cur_c = 33;
 static int alignment, phase, samples, alignment_no_move;
 static int32_t duties[3];
@@ -42,7 +42,7 @@ int app_spi_send(int spi, int bytes, uint32_t data)
   int a = angle;
   if (alignment) a = ((samples++ & 1) ? 16383 : 0) +
                      (phase && !alignment_no_move ? 4096 : 0);
-  uint32_t payload = (uint32_t)(a & 16383) << 4;
+  uint32_t payload = ((uint32_t)(a & 16383) << 4) | (uint32_t)(mg_bad & 0x0f);
   test_rxdata = payload << 6 | (reference_crc(payload) ^ !!crc_bad);
   return 1;
 }
@@ -89,7 +89,7 @@ int UART_ReceiveData(int uart) { (void)uart; return *rx++; }
 static void tick(unsigned n) { while (n--) control_step_isr(); }
 static void reset(void)
 {
-  angle=crc_bad=adc_bad=break_fault=alignment=alignment_no_move=0;
+  angle=crc_bad=mg_bad=adc_bad=break_fault=alignment=alignment_no_move=0;
   test_spi_status=2; driver_status=8; driver_ctrl2=DRV_VAL_CTRL2;
   cur_a=11; cur_b=22; cur_c=33;
   foc_init(7); motion_init(); motion_set_isr_rate(1000);
@@ -120,6 +120,34 @@ static void test_alignment(void)
   assert(!foc_align_sensor() && !enabled);
   crc_bad=1; assert(!foc_align_sensor() && !enabled);
   puts("PASS circular alignment / absent movement / CRC calibration failure");
+}
+static void test_encoder_field_debounce(void)
+{
+  reset(); angle=4321; tick(1);
+  motion_manual_start(1,100); assert(enabled);
+  angle=4321; mg_bad=1; tick(1);
+  assert(motion_state()==MOTION_RUN && enabled);
+  assert(foc_last_angle()==4321);
+  mg_bad=0; tick(1);
+  mg_bad=1; tick(1999);
+  assert(motion_state()==MOTION_RUN && enabled);
+  tick(1);
+  assert(motion_state()==MOTION_FAULT && !enabled);
+  assert(!strcmp(motion_fault_msg(),"encoder invalid/field"));
+  puts("PASS encoder field status debounce / persistent fault");
+}
+static void test_spin_openloop_mode(void)
+{
+  reset(); angle=2000; tick(1);
+  assert(motion_spin_start_mode(1, 0.10f, 80, 1));
+  assert(motion_spin_pct() == 40);
+  tick(10);
+  assert(motion_spin_active() && g_foc.comm_override);
+  assert(g_foc.torque_q > 0);
+  motion_spin_stop();
+  tick(5000);
+  assert(!motion_spin_active() && !g_foc.comm_override);
+  puts("PASS open-loop SPIN mode / vector commutation / release");
 }
 static void test_faults_and_restarts(void)
 {
@@ -256,6 +284,8 @@ static void test_diagnostic_readiness(void)
 int main(void)
 {
   test_crc_and_sampling(); test_alignment(); test_faults_and_restarts();
+  test_encoder_field_debounce();
+  test_spin_openloop_mode();
   test_overcurrent_telemetry();
   test_openloop_and_long_time(); test_console_and_blockage();
   test_long_trajectory();

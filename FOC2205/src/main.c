@@ -19,6 +19,15 @@
 #define MOTION_AUTORUN 0
 #endif
 
+// Do not reload the CPLD bitstream from firmware by default. The 2026-10-17
+// bring-up image with this path enabled reproduced the first-CPLD-access hang
+// after reset. The ROM already loads the bitstream on a real power cycle; the
+// FCB path needs its DMA setup/completion handling independently validated
+// before it can be used as a hot-reset workaround.
+#ifndef FOC_RELOAD_LOGIC
+#define FOC_RELOAD_LOGIC 0
+#endif
+
 #define POLE_PAIRS 7   // 2205(2804) 12N14P — docs/电机参数.md 已确认
 
 volatile uint32_t g_stage;
@@ -294,6 +303,9 @@ startup_fault:
 
     if (motion_manual_timed_out()) {
       printf("manual mode auto-released (30 s idle) -- power stage off\n");
+    }
+    if (motion_spin_timed_out()) {
+      printf("SPIN host watchdog: no command for 1 s -- ramping down\n");
     }
 
     if (FOC_CPLD_BRINGUP && (int32_t)(up_ms - drv_next_ms) >= 0) { // 每秒刷一次故障面

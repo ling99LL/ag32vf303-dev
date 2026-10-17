@@ -1,4 +1,4 @@
-// Voltage/modulation-mode motion controller, not a current/torque feedback loop.
+// Motion controller on top of the FOC voltage/current loop.
 // Position: 16384 raw/turn; velocity: raw/s. Q12 commands are normalized to
 // g_foc.v_limit_q; no Vbus measurement exists to infer physical phase volts.
 // STOP/DONE/FAULT disable INL and MOE. FAULT requires control_recover(), which
@@ -48,6 +48,30 @@ void motion_trip(const char *why);
 int motion_recover(void);
 int  motion_openloop_start(float rev_per_s, int32_t vq_q12, uint32_t ms);
 int  motion_torque_hold(int32_t vq_q12, uint32_t ms);
+
+// Endless position ramp ("SPIN"). The host must poll at least once per second
+// or the ISR starts a bounded deceleration and releases the bridge.
+#ifndef SPIN_POWER_PCT_MAX
+#define SPIN_POWER_PCT_MAX 80
+#endif
+#ifndef SPIN_POWER_PCT_DEFAULT
+#define SPIN_POWER_PCT_DEFAULT 20
+#endif
+#ifndef SPIN_OPENLOOP_POWER_PCT_MAX
+#define SPIN_OPENLOOP_POWER_PCT_MAX 40
+#endif
+int  motion_spin_start(int direction, float rev_per_s, int power_pct);
+int  motion_spin_start_mode(int direction, float rev_per_s, int power_pct,
+                            int open_loop);
+void motion_spin_stop(void);
+void motion_spin_keepalive(void);
+void motion_spin_set_speed(float rev_per_s);
+void motion_spin_set_power(int power_pct);
+int  motion_spin_active(void);
+int  motion_spin_stopping(void);
+int32_t motion_spin_pct(void);
+float   motion_spin_rps(void);
+int  motion_spin_timed_out(void);
 
 void motion_manual_start(uint8_t mask, int32_t pct);
 void motion_manual_set(uint8_t mask, int32_t pct);

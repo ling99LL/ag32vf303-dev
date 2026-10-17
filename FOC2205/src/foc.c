@@ -13,11 +13,23 @@
 #define PI_F 3.14159265359f
 #define FOC_LUT_SIZE 256
 
+// A CRC-valid MT6701 frame can still report a transient field-strength or
+// overspeed status bit.  Keep steering with the angle, but trip only if the
+// status remains abnormal for about 100 ms at the 20 kHz PWM rate.
+#define FOC_FIELD_TRIP_COUNT 2000u
+
 // Voltage mode is the default; the inner current loop is enabled at runtime
 // (console 'l') only from standby, after the operator has checked the measured
 // id/iq polarity in the status frame.
 #ifndef FOC_CURRENT_LOOP_DEFAULT
 #define FOC_CURRENT_LOOP_DEFAULT 0
+#endif
+
+// The ADC clips near 2.75 A at the configured 0.6 V/A gain. Keep the runtime
+// trip below the motor's 2.5 A rating with a small margin; this remains a
+// software threshold, not a calibrated current limiter.
+#ifndef FOC_CURRENT_TRIP_LSB_MAX
+#define FOC_CURRENT_TRIP_LSB_MAX 1800
 #endif
 
 foc_params_t g_foc;
@@ -29,6 +41,7 @@ static int16_t s_ia, s_ib, s_ic;
 static int32_t s_angle_q14;
 static uint32_t s_crc_errors;
 static uint32_t s_crc_consecutive;
+static uint32_t s_field_bad_consecutive;
 static uint32_t s_adc_errors;
 static uint32_t s_adc_consecutive;
 static uint8_t s_angle_valid;
@@ -117,6 +130,7 @@ void foc_init(uint16_t pole_pairs)
   g_foc.cur_ref_div = 12;       // 25% torque cap -> 2048/12 ~= 170 LSB ~= 228 mA
   g_foc.cur_filt_alpha = 0.25f; // light LPF on feedback and telemetry
   g_foc.cur_v_cap = 4096;       // 50% modulation output clamp for bring-up
+  g_foc.cur_trip_lsb = CURRENT_TRIP_LSB;
   // 换向角低通：1/64 -> 噪声衰减约 0.088 倍，滞后 1.6 ms。设 1.0 可完全关掉
   // （串口 'q' 键循环切换，用于 A/B 对比）。
   g_foc.angle_filt_alpha = 1.0f / 64.0f;
@@ -264,6 +278,13 @@ void foc_step_isr(void)
     s_angle = sample;
     s_angle_valid = 1;
     s_crc_consecutive = 0;
+    if (sample.mg & 0x0bu) {
+      // Do not abort on a transient field/overspeed status bit. The angle is
+      // still CRC-valid, so use it and require a sustained fault to trip.
+      ++s_field_bad_consecutive;
+    } else {
+      s_field_bad_consecutive = 0;
+    }
   } else {
     ++s_crc_errors;         // drop frame, keep last good angle
     ++s_crc_consecutive;
@@ -280,7 +301,7 @@ void foc_step_isr(void)
     if (!current_calibrated() || s_adc_consecutive) {
       motion_trip("ADC timeout"); return;
     }
-    if (!foc_angle_valid() || (s_angle.mg & 0x0bu)) {
+    if (!foc_angle_valid() || s_field_bad_consecutive >= FOC_FIELD_TRIP_COUNT) {
       motion_trip("encoder invalid/field"); return;
     }
   }
@@ -289,10 +310,13 @@ void foc_step_isr(void)
   // around the event. Isolated over-threshold samples are counted as glitches
   // (peak-captured, snapshotted) instead of aborting the move on one bad read.
   if (armed && cur_ok) {
+    int32_t trip_lsb = g_foc.cur_trip_lsb;
+    if (trip_lsb < CURRENT_TRIP_LSB) trip_lsb = CURRENT_TRIP_LSB;
+    if (trip_lsb > FOC_CURRENT_TRIP_LSB_MAX) trip_lsb = FOC_CURRENT_TRIP_LSB_MAX;
     uint8_t mask = 0u;
-    if (s_ia > CURRENT_TRIP_LSB || s_ia < -CURRENT_TRIP_LSB) mask |= 1u;
-    if (s_ib > CURRENT_TRIP_LSB || s_ib < -CURRENT_TRIP_LSB) mask |= 2u;
-    if (s_ic > CURRENT_TRIP_LSB || s_ic < -CURRENT_TRIP_LSB) mask |= 4u;
+    if (s_ia > trip_lsb || s_ia < -trip_lsb) mask |= 1u;
+    if (s_ib > trip_lsb || s_ib < -trip_lsb) mask |= 2u;
+    if (s_ic > trip_lsb || s_ic < -trip_lsb) mask |= 4u;
     if (mask) {
       s_oc_last_mask = mask;
       ++s_oc_events;
@@ -499,6 +523,18 @@ void foc_current_loop_enable(int on)
 }
 
 int foc_current_loop_enabled(void) { return g_foc.current_loop; }
+
+void foc_current_limit_set(int32_t trip_lsb, int32_t v_cap)
+{
+  uint32_t key = control_lock();
+  if (trip_lsb < CURRENT_TRIP_LSB) trip_lsb = CURRENT_TRIP_LSB;
+  if (trip_lsb > FOC_CURRENT_TRIP_LSB_MAX) trip_lsb = FOC_CURRENT_TRIP_LSB_MAX;
+  if (v_cap < 512) v_cap = 512;
+  if (v_cap > g_foc.v_limit_q) v_cap = g_foc.v_limit_q;
+  g_foc.cur_trip_lsb = trip_lsb;
+  g_foc.cur_v_cap = v_cap;
+  control_unlock(key);
+}
 
 void foc_last_dq(int16_t *d, int16_t *q)
 {

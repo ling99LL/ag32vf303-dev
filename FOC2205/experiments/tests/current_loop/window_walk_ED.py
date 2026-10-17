@@ -190,7 +190,7 @@ with serial.Serial(args.port, 115200, timeout=.02, write_timeout=.5) as ser, \
     say('P0 fw=%s up=%s st=%s cl=%s ready=%s ang=%s'
         % (last().get('fw'), last().get('up'), last().get('st'), last().get('cl'),
            last().get('ready'), last().get('ang')))
-    if last().get('fw') != '20261017.1':
+    if last().get('fw') != '20261017.10':
         raise RuntimeError('unexpected fw ' + str(last().get('fw')))
 
     # speed gear: cycle 'v' until the reported speed matches the requested gear

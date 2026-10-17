@@ -43,6 +43,7 @@ static int s_kd_gear = 2;
 static int s_af_gear = 2;      // 默认 1/64
 static int s_ckp_gear = 2;     // 电流环 kp 默认 8
 static int s_cki_gear = 3;     // 电流环 ki 默认 100
+static int s_spin_openloop;    // #0 closed-loop / #1 open-loop
 
 static void console_help(void)
 {
@@ -53,6 +54,9 @@ static void console_help(void)
   printf("g / n : release all outputs (same as s)\n");
   printf("?     : one-line status frame (for tools/foc_panel.py)\n");
   printf("m / xN / wN : manual phase force: on / mask 0-7 / strength 5/10/15/20pct\n");
+  printf("p / P : endless SPIN forward / reverse; s ramps down and releases\n");
+  printf("#0/#1 : SPIN closed-loop / open-loop mode (set before p/P)\n");
+  printf("V1-4  : SPIN speed 0.05/0.10/0.25/1.00 rev/s  W1-8 : SPIN force 10-80%%\n");
   printf("s     : release torque (stop)\n");
   printf("+ / - : modulation limit x1.25 / x0.75 (capped)\n");
   printf("k     : kp gear (pos. gain)      v : speed gear\n");
@@ -96,12 +100,43 @@ static void console_dump_cfg(void)
          (g_foc.angle_filt_alpha >= 1.0f)
            ? 0
            : (int)(1.0f / g_foc.angle_filt_alpha));
-  printf("curloop=%d kp=%d ki=%d ref_div=%d filt=%s%d cap=%d (mod LSB)\n",
+  printf("curloop=%d kp=%d ki=%d ref_div=%d filt=%s%d cap=%d trip=%d (mod LSB)\n",
          (int)foc_current_loop_enabled(), (int)g_foc.cur_kp, (int)g_foc.cur_ki,
          (int)g_foc.cur_ref_div,
          (g_foc.cur_filt_alpha >= 1.0f) ? "OFF" : "1/",
          (g_foc.cur_filt_alpha >= 1.0f) ? 0 : (int)(1.0f / g_foc.cur_filt_alpha),
-         (int)g_foc.cur_v_cap);
+         (int)g_foc.cur_v_cap, (int)g_foc.cur_trip_lsb);
+}
+
+// SPIN is the only feature allowed above the global motion-power ceiling.
+// Apply the empirically smooth 3-15 rpm configuration explicitly so a stale
+// interactive tuning session cannot silently leak into an unattended run.
+static void console_spin_preset(void)
+{
+  s_kp_gear = 4;      g_motion_cfg.kp = s_kp_gears[s_kp_gear];
+  s_kd_gear = 3;      g_motion_cfg.kd = s_kd_gears[s_kd_gear];
+  s_ki_gear = 2;      g_motion_cfg.ki = s_ki_gears[s_ki_gear];
+  s_fl_gear = 2;      g_motion_cfg.err_follow = s_fl_gears[s_fl_gear];
+  // 60 rpm needs less angle-filter lag: 1/256 at 3-15 rpm was best, while
+  // 1/64 removes the 7 Hz electrical ripple at 60 rpm.
+  s_af_gear = (motion_spin_rps() >= 0.5f) ? 2 : 3;
+  g_foc.angle_filt_alpha = s_af_gears[s_af_gear];
+  s_vw_gear = 3;      motion_set_vel_window(s_vw_gears[s_vw_gear]);
+  s_ckp_gear = 2;     g_foc.cur_kp = s_ckp_gears[s_ckp_gear];
+  s_cki_gear = 3;     g_foc.cur_ki = s_cki_gears[s_cki_gear];
+  g_motion_cfg.err_limit = 2048.0f;
+  g_motion_cfg.settle_raw = 200;
+  motion_hybrid_enable(0);
+  if (s_spin_openloop) {
+    if (foc_current_loop_enabled()) foc_current_loop_enable(0);
+  } else if (!foc_current_loop_enabled()) {
+    foc_current_loop_enable(1);
+  }
+  printf("SPIN preset: mode=%s hyb=0 kp=8 kd=60/1000 filt=%s%d loop=%s\n",
+         s_spin_openloop ? "open" : "closed",
+         (g_foc.angle_filt_alpha >= 1.0f) ? "OFF" : "1/",
+         (g_foc.angle_filt_alpha >= 1.0f) ? 0 : (int)(1.0f / g_foc.angle_filt_alpha),
+         s_spin_openloop ? "OFF" : "ON");
 }
 
 
@@ -112,19 +147,20 @@ static void print_status_frame(void)
   foc_last_currents(&ia, &ib, &ic);
   int32_t ang = foc_last_angle();
   uint32_t deg10 = (uint32_t)(((uint64_t)(uint32_t)ang * 3600u) / 16384u);
-  int mode = motion_manual_active() ? 1 : 0;
+  int mode = motion_manual_active() ? 1 : motion_spin_active() ? 2 : 0;
+  int pct = (mode == 2) ? (int)motion_spin_pct() : (int)motion_manual_pct();
   int16_t id16 = 0, iq16 = 0;
   foc_last_dq(&id16, &iq16);
   foc_oc_t oc;
   foc_oc_get(&oc);
   printf("#FOC,proto=2,ang=%d,deg=%u.%u,crc=%u,ia=%d,ib=%d,ic=%d,mode=%d,mask=%u,pct=%d,"
          "drv=0x%02x,vq=%ld,iacc=%ld,err=%ld,vel=%ld,st=%d,hyb=%d,slip=%ld,"
-         "diag=1,fw=20261017.1,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
+         "diag=1,fw=20261017.10,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
          "drvok=%d,encok=%d,mg=%u,adcok=%d,cal=%d,adce=%u,brk=%d,out=%d,"
-         "cl=%d,id=%d,iq=%d,iref=%ld,ipa=%d,ipb=%d,ipc=%d,ocn=%u,ocmx=%u,ocg=%u,fault=%s\n",
+         "cl=%d,open=%d,id=%d,iq=%d,iref=%ld,ipa=%d,ipb=%d,ipc=%d,ocn=%u,ocmx=%u,ocg=%u,fault=%s\n",
          (int)ang, (unsigned)(deg10 / 10u), (unsigned)(deg10 % 10u),
          (unsigned)foc_crc_errors(), (int)ia, (int)ib, (int)ic,
-         mode, (unsigned)motion_manual_mask(), (int)motion_manual_pct(),
+         mode, (unsigned)motion_manual_mask(), pct,
          (unsigned)(control_driver_status() & 0xFFu), (long)motion_cmd_q12(),
          (long)motion_iacc_q12(),
          (long)motion_error_raw(), (long)motion_vel_rawps(),
@@ -136,7 +172,7 @@ static void print_status_frame(void)
          foc_angle_valid(), (unsigned)foc_sensor_status(), foc_current_valid(),
          current_calibrated(), (unsigned)foc_adc_errors(), pwm3ph_faulted(),
          pwm3ph_enabled(),
-         foc_current_loop_enabled(), (int)id16, (int)iq16, (long)foc_last_iq_ref(),
+         foc_current_loop_enabled(), s_spin_openloop, (int)id16, (int)iq16, (long)foc_last_iq_ref(),
          (int)oc.pk_a, (int)oc.pk_b, (int)oc.pk_c,
          (unsigned)oc.events, (unsigned)oc.max_run, (unsigned)oc.glitches,
          motion_fault_msg());
@@ -151,6 +187,11 @@ void console_feed(int ch)
     s_arg_cmd = 0;
     s_cancel_autorun = 1;
     calibration_cancel();
+    if (motion_spin_active()) {
+      motion_spin_stop();
+      printf("SPIN stopping: bounded deceleration, then output release\n");
+      return;
+    }
     motion_stop();
     printf("released; state=%d (z requests checked fault recovery)\n", motion_state());
     return;
@@ -163,7 +204,18 @@ void console_feed(int ch)
   if (s_arg_cmd) {
     int cmd = s_arg_cmd;
     s_arg_cmd = 0;
-    if (cmd == 'x' && ch >= '0' && ch <= '7') {
+    if (cmd == '#') {
+      if (motion_state() == MOTION_RUN) {
+        printf("SPIN mode: stop the current rotation first\n");
+      } else if (ch == '0' || ch == '1') {
+        s_spin_openloop = (ch == '1');
+        printf("SPIN mode=%s (current loop %s)\n",
+               s_spin_openloop ? "OPEN: voltage/fixed vector" : "CLOSED: position + current loop",
+               s_spin_openloop ? "OFF" : "ON");
+      } else {
+        printf("bad arg after '#' (use 0=closed, 1=open)\n");
+      }
+    } else if (cmd == 'x' && ch >= '0' && ch <= '7') {
       if (!motion_manual_active()) {
         printf("not in manual mode (press m first)\n");
       } else {
@@ -183,6 +235,20 @@ void console_feed(int ch)
         motion_manual_set(0xFFu, pct);
         printf("manual pct requested=%d (cap=%d)\n", pct, MOTION_POWER_PCT_MAX);
       }
+    } else if (cmd == 'V' && ch >= '1' && ch <= '4') {
+      static const float rps[4] = { 0.05f, 0.10f, 0.25f, 1.00f };
+      float v = rps[ch - '1'];
+      motion_spin_set_speed(v);
+      printf("SPIN speed=%d.%02u rev/s (%d rpm)\n",
+             (int)v, (unsigned)(((int)(v * 100.0f)) % 100),
+             (int)(v * 60.0f + 0.5f));
+    } else if (cmd == 'W' && ch >= '1' && ch <= '8') {
+      int pct = (ch - '0') * 10;
+      if (s_spin_openloop && pct > SPIN_OPENLOOP_POWER_PCT_MAX)
+        pct = SPIN_OPENLOOP_POWER_PCT_MAX;
+      motion_spin_set_power(pct);
+      printf("SPIN force=%d%% (mode cap %d%%)\n", pct,
+             s_spin_openloop ? SPIN_OPENLOOP_POWER_PCT_MAX : SPIN_POWER_PCT_MAX);
     } else {
       printf("bad arg after '%c'\n", (char)cmd);
     }
@@ -195,11 +261,17 @@ void console_feed(int ch)
       else
         printf("calibration refused: check status/driver/encoder/ADC and keep outputs off\n");
       break;
+    case '#':
+      s_arg_cmd = '#';          // 下一个字符：0=闭环，1=开环
+      break;
     case 'x': case 'X':
       s_arg_cmd = 'x';          // 下一个字符是掩码 '0'..'7'
       break;
-    case 'w': case 'W':
+    case 'w':
       s_arg_cmd = 'w';          // 下一个字符是强度 '1'..'4'
+      break;
+    case 'W':
+      s_arg_cmd = 'W';          // SPIN 力度 '1'..'8' = 10%..80%
       break;
     case 'm': case 'M':
       motion_manual_start(0, motion_manual_pct()); // neutral until an explicit xN
@@ -211,6 +283,30 @@ void console_feed(int ch)
              (motion_manual_mask() & 4) ? 1 : 0,
              (int)motion_manual_pct());
       break;
+    case 'p': case 'P': {
+      if (motion_spin_active()) {
+        printf("SPIN already active; press s before changing direction\n");
+        break;
+      }
+      if (motion_state() == MOTION_RUN) { printf("busy: stop the current move first\n"); break; }
+      if (motion_state() == MOTION_FAULT) { printf("fault latched; use z for checked recovery\n"); break; }
+      if (calibration_active()) { printf("busy: calibration is active\n"); break; }
+      if (!control_ready()) { printf("SPIN refused: calibration/driver/encoder/ADC not ready\n"); break; }
+      console_spin_preset();
+      int dir = (ch == 'P') ? -1 : 1;
+      if (motion_spin_start_mode(dir, motion_spin_rps(), (int)motion_spin_pct(),
+                                 s_spin_openloop)) {
+        printf("SPIN start: %s %s %.2f rev/s (%d rpm), force cap=%ld%%\n",
+               s_spin_openloop ? "open-loop" : "closed-loop",
+               dir < 0 ? "reverse" : "forward", motion_spin_rps(),
+               (int)(motion_spin_rps() * 60.0f + 0.5f),
+               (long)motion_spin_pct());
+        printf("host watchdog: 1 s without commands -> ramp stop; 's' stops now\n");
+      } else {
+        printf("SPIN start refused (state=%d)\n", motion_state());
+      }
+      break;
+    }
     case '?':
       print_status_frame();
       break;
@@ -289,7 +385,7 @@ void console_feed(int ch)
         printf("OC snap: kind=%s run=%u mask=%u (thr=%d lsb):\n",
                (oc.snap_kind == 2u) ? "trip" : "glitch",
                (unsigned)oc.snap_run, (unsigned)oc.snap_mask,
-               CURRENT_TRIP_LSB);
+               (int)g_foc.cur_trip_lsb);
         for (int i = 0; i < oc.snap_n; ++i)
           printf("  %d: %d %d %d\n", i, (int)oc.snap[i][0],
                  (int)oc.snap[i][1], (int)oc.snap[i][2]);
@@ -322,7 +418,7 @@ void console_feed(int ch)
                               : "recovery refused: check f/status; startup calibration failures need reboot\n");
 #endif
       break;
-    case 'p': case 'P': case 'N':
+    case 'N':
       printf("raw power bypass removed; use bounded manual mode m/xN/wN\n");
       break;
     case '+': case '=': {
@@ -353,12 +449,15 @@ void console_feed(int ch)
       g_foc.cur_kp = s_ckp_gears[s_ckp_gear];
       printf("cur kp=%d (mod LSB per current LSB)\n", (int)g_foc.cur_kp);
       break;
-    case 'v': case 'V':
+    case 'v':
       s_sp_gear = (s_sp_gear + 1) % 5;
       g_motion_cfg.rev_per_s = s_sp_gears[s_sp_gear];
       printf("speed=%d.%02u rev/s\n",
              (int)g_motion_cfg.rev_per_s,
              (unsigned)(((int)(g_motion_cfg.rev_per_s * 100.0f)) % 100));
+      break;
+    case 'V':
+      s_arg_cmd = 'V';          // SPIN 速度 '1'..'3'
       break;
     case 'j': case 'J':
       s_kd_gear = (s_kd_gear + 1) % 5;
@@ -445,6 +544,28 @@ void console_init(uint32_t hz)
   console_dump_cfg();
 }
 int console_autorun_cancelled(void) { return s_cancel_autorun; }
+
+// Only a recognized protocol byte proves that a live host is still talking to
+// the board. A pulled cable can leave the UART RX line floating and produce
+// arbitrary bytes; those must not refresh the SPIN host watchdog.
+static int console_keepalive_cmd(int ch)
+{
+  switch (ch) {
+    case '?': case 'a': case 'A': case 'b': case 'B': case 'c': case 'C':
+    case 'd': case 'D': case 'e': case 'E': case 'f': case 'F': case 'g':
+    case 'G': case 'h': case 'H': case 'i': case 'I': case 'j': case 'J':
+    case 'k': case 'K': case 'l': case 'L': case 'm': case 'M': case 'n':
+    case 'N': case 'o': case 'O': case 'p': case 'P': case 'q': case 'Q':
+    case 'r': case 'R': case 's': case 'S': case 't': case 'T': case 'u':
+    case 'U': case 'v': case 'V': case 'w': case 'W': case 'x': case 'X':
+    case 'y': case 'Y': case 'z': case 'Z': case '!': case '+': case '-':
+    case '=': case '_': case ' ': case '#':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 void console_poll(uint32_t now_ms)
 {
   s_now_ms = now_ms;
@@ -452,6 +573,9 @@ void console_poll(uint32_t now_ms)
   for (int i = 0; i < 32; ++i) {
     int ch = console_getch();
     if (ch < 0) break;
+    // The panel's 100 ms '?' poll is the normal heartbeat. Only recognized
+    // command bytes refresh it; arbitrary UART noise must not.
+    if (console_keepalive_cmd(ch)) motion_spin_keepalive();
     // Only protocol commands that prove a live operator/host should refresh
     // the calibration watchdog. Arbitrary bytes or line noise must not keep
     // power-producing calibration alive indefinitely.

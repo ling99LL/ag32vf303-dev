@@ -5,6 +5,7 @@
 #include "pwm3ph.h"
 #include "control_lock.h"
 #include "control.h"
+#include "calibration.h"
 
 #define TWO_PI_F 6.28318530718f
 #define PI_F 3.14159265359f
@@ -12,6 +13,12 @@
 #define Q16 65536LL
 #define MAN_TIMEOUT_MS 30000u
 #define MAX_DURATION_MS 3600000u
+#define SPIN_TIMEOUT_MS 1000u
+#define SPIN_STOP_TIMEOUT_MS 2000u
+#define SPIN_RPS_MIN 0.05f
+#define SPIN_RPS_MAX 1.00f
+#define SPIN_ACCEL_RAWPS2 12288          // 0.75 turn/s^2
+#define SPIN_STOP_VEL_RAWPS (RAW_TURN / 100)
 
 motion_cfg_t g_motion_cfg = {
   .kp=2.0f, .kd=0.02f, .kd_hold=0.0f, .ki=1.5f,
@@ -24,7 +31,7 @@ motion_cfg_t g_motion_cfg = {
 #define MOTION_HYBRID_DEFAULT 1
 #endif
 
-typedef enum { POSITION, OPENLOOP, TORQUE, MANUAL } motion_mode_t;
+typedef enum { POSITION, OPENLOOP, TORQUE, MANUAL, SPIN } motion_mode_t;
 static volatile motion_state_t s_state;
 static motion_mode_t s_mode;
 static const char *s_fault = "";
@@ -45,6 +52,13 @@ static float s_angle, s_slip, s_ol_inc;
 static uint32_t s_corrections;
 static int32_t s_fixed_vq, s_man_pct = 10;
 static uint8_t s_man_mask = 1;
+static int64_t s_spin_inc_target, s_spin_accel_step;
+static int s_spin_pct = SPIN_POWER_PCT_DEFAULT, s_spin_stopping, s_spin_timedout;
+static int s_spin_openloop;
+static int8_t s_spin_dir = 1;
+static float s_spin_rps = 0.10f;
+static volatile uint32_t s_spin_last_host_tick;
+static uint32_t s_spin_stop_deadline, s_spin_zero_ticks;
 
 static float wrap(float a)
 {
@@ -71,10 +85,29 @@ int32_t motion_vq_limit(void)
 }
 static int32_t cap_vq(int32_t v)
 {
-  int32_t cap = motion_vq_limit();
+  int32_t cap = (s_state == MOTION_RUN && s_mode == SPIN && g_foc.v_limit_q > 0)
+              ? (int32_t)((int64_t)g_foc.v_limit_q * s_spin_pct / 100)
+              : motion_vq_limit();
   if (v > cap) v = cap;
   if (v < -cap) v = -cap;
   return v;
+}
+// SPIN is allowed to request up to 80% modulation. Scale both the current-loop
+// output ceiling and the burst over-current threshold with that request, so a
+// high-force SPIN does not immediately trip on its own current reference while
+// the normal motion modes keep the conservative 200-LSB threshold.
+static void spin_apply_current_limits_locked(void)
+{
+  int32_t div = g_foc.cur_ref_div > 0 ? g_foc.cur_ref_div : 1;
+  int32_t iref = (int32_t)((int64_t)g_foc.v_limit_q * s_spin_pct / 100 / div);
+  int32_t trip = iref + iref / 2;
+  int32_t cap = (int32_t)((int64_t)g_foc.v_limit_q * s_spin_pct / 100);
+  if (trip < CURRENT_TRIP_LSB) trip = CURRENT_TRIP_LSB;
+  foc_current_limit_set(trip, cap);
+}
+static void spin_restore_current_limits_locked(void)
+{
+  foc_current_limit_set(CURRENT_TRIP_LSB, 4096);
 }
 static void release(void)
 {
@@ -85,6 +118,7 @@ static void release(void)
   s_hy_init = 0;
   s_vq = s_iacc = 0;
   s_integral = 0;
+  if (s_mode == SPIN) spin_restore_current_limits_locked();
 }
 static void abort_move(const char *why)
 {
@@ -132,6 +166,9 @@ void motion_init(void)
   s_vel_count = 0;
   s_ticks = 0;
   s_hybrid = MOTION_HYBRID_DEFAULT;
+  s_spin_pct = SPIN_POWER_PCT_DEFAULT;
+  s_spin_openloop = 0;
+  s_spin_stopping = s_spin_timedout = 0;
   g_motion_cfg.vq_max = motion_vq_limit();
 }
 void motion_set_isr_rate(uint32_t hz)
@@ -224,6 +261,124 @@ int motion_torque_hold(int32_t vq, uint32_t ms)
   control_unlock(key);
   return ok;
 }
+
+static int64_t spin_inc_for(float rps)
+{
+  return (int64_t)(rps * (float)RAW_TURN * (float)Q16 / (float)s_hz);
+}
+
+int motion_spin_start_mode(int direction, float rps, int pct, int open_loop)
+{
+  uint32_t key = control_lock();
+  int ok = 0;
+  if (s_state == MOTION_RUN || s_state == MOTION_FAULT || !control_ready() ||
+      !isfinite(rps) || rps < SPIN_RPS_MIN || rps > SPIN_RPS_MAX) goto done;
+  if (pct <= 0) pct = SPIN_POWER_PCT_DEFAULT;
+  if (pct > SPIN_POWER_PCT_MAX) pct = SPIN_POWER_PCT_MAX;
+  if (open_loop && pct > SPIN_OPENLOOP_POWER_PCT_MAX)
+    pct = SPIN_OPENLOOP_POWER_PCT_MAX;
+  s_spin_pct = pct;
+  s_spin_openloop = open_loop ? 1 : 0;
+  s_spin_rps = rps;
+  s_spin_dir = direction < 0 ? -1 : 1;
+  s_spin_inc_target = spin_inc_for(rps);
+  if (s_spin_dir < 0) s_spin_inc_target = -s_spin_inc_target;
+  s_spin_accel_step = (int64_t)SPIN_ACCEL_RAWPS2 * Q16 /
+                      ((int64_t)s_hz * s_hz);
+  if (s_spin_accel_step < 1) s_spin_accel_step = 1;
+  s_inc = 0;
+  s_cmd = 0;
+  s_target = 0;
+  s_integral = 0;
+  s_spin_stopping = s_spin_timedout = 0;
+  s_spin_zero_ticks = 0;
+  s_spin_stop_deadline = 0;
+  g_motion_cfg.rev_per_s = rps;
+  if (!begin(SPIN, 0)) goto done;
+  if (s_spin_openloop) {
+    // Park the field on the rotor, as the finite open-loop sweep does, then
+    // advance it from the encoder electrical zero. The current loop stays OFF.
+    s_angle = wrap(encoder_elec() - (float)(PI_F / 2.0));
+    g_foc.comm_angle_e = s_angle;
+    g_foc.comm_override = 1;
+  }
+  spin_apply_current_limits_locked();
+  s_spin_last_host_tick = s_ticks;
+  ok = 1;
+done:
+  control_unlock(key);
+  return ok;
+}
+
+int motion_spin_start(int direction, float rps, int pct)
+{
+  return motion_spin_start_mode(direction, rps, pct, 0);
+}
+
+void motion_spin_stop(void)
+{
+  uint32_t key = control_lock();
+  if (s_state == MOTION_RUN && s_mode == SPIN && !s_spin_stopping) {
+    s_spin_stopping = 1;
+    s_spin_inc_target = 0;
+    s_spin_zero_ticks = 0;
+    s_spin_stop_deadline = s_ticks + (SPIN_STOP_TIMEOUT_MS * s_hz / 1000u);
+  }
+  control_unlock(key);
+}
+
+void motion_spin_keepalive(void)
+{
+  if (s_state == MOTION_RUN && s_mode == SPIN) {
+    s_spin_last_host_tick = s_ticks;
+  }
+}
+
+void motion_spin_set_speed(float rps)
+{
+  if (!isfinite(rps) || rps < SPIN_RPS_MIN || rps > SPIN_RPS_MAX) return;
+  uint32_t key = control_lock();
+  s_spin_rps = rps;
+  g_motion_cfg.rev_per_s = rps;
+  if (s_state == MOTION_RUN && s_mode == SPIN && !s_spin_stopping) {
+    s_spin_inc_target = spin_inc_for(rps);
+    if (s_spin_dir < 0) s_spin_inc_target = -s_spin_inc_target;
+  }
+  control_unlock(key);
+}
+
+void motion_spin_set_power(int pct)
+{
+  if (pct < 1) pct = 1;
+  if (pct > SPIN_POWER_PCT_MAX) pct = SPIN_POWER_PCT_MAX;
+  uint32_t key = control_lock();
+  s_spin_pct = pct;
+  if (s_state == MOTION_RUN && s_mode == SPIN) spin_apply_current_limits_locked();
+  control_unlock(key);
+}
+
+int motion_spin_active(void)
+{
+  return s_state == MOTION_RUN && s_mode == SPIN;
+}
+
+int motion_spin_stopping(void)
+{
+  return s_state == MOTION_RUN && s_mode == SPIN && s_spin_stopping;
+}
+
+int32_t motion_spin_pct(void) { return s_spin_pct; }
+float motion_spin_rps(void) { return s_spin_rps; }
+
+int motion_spin_timed_out(void)
+{
+  uint32_t key = control_lock();
+  int r = s_spin_timedout;
+  s_spin_timedout = 0;
+  control_unlock(key);
+  return r;
+}
+
 void motion_manual_start(uint8_t mask, int32_t pct)
 {
   uint32_t key = control_lock();
@@ -347,7 +502,7 @@ void motion_step_isr(void)
   if (s_state != MOTION_RUN) { g_foc.torque_q = 0; return; }
   ++s_ticks;
   if (foc_crc_errors() - s_crc0 > 200u) { abort_move("crc storm"); return; }
-  if (s_mode != POSITION && s_ticks >= s_duration) {
+  if (s_mode != POSITION && s_mode != SPIN && s_ticks >= s_duration) {
     if (s_mode == MANUAL) s_man_timedout = 1;
     finish();
     return;
@@ -366,24 +521,80 @@ void motion_step_isr(void)
     s_vq = cap_vq(s_fixed_vq);
   } else if (s_mode == TORQUE) {
     s_vq = cap_vq(s_fixed_vq);
-  } else {
-    if ((uint64_t)s_ticks * 1000 / s_hz > s_timeout) {
-      abort_move("timeout"); return;
+  } else if (s_mode == SPIN && s_spin_openloop) {
+    uint32_t host_limit = SPIN_TIMEOUT_MS * s_hz / 1000u;
+    if (!s_spin_stopping &&
+        (uint32_t)(s_ticks - s_spin_last_host_tick) > host_limit) {
+      s_spin_stopping = 1;
+      s_spin_inc_target = 0;
+      s_spin_zero_ticks = 0;
+      s_spin_stop_deadline = s_ticks + (SPIN_STOP_TIMEOUT_MS * s_hz / 1000u);
+      s_spin_timedout = 1;
     }
+    int64_t rate = s_spin_stopping ? 0 : s_spin_inc_target;
+    if (s_inc < rate) {
+      s_inc += s_spin_accel_step;
+      if (s_inc > rate) s_inc = rate;
+    } else if (s_inc > rate) {
+      s_inc -= s_spin_accel_step;
+      if (s_inc < rate) s_inc = rate;
+    }
+    s_cmd += s_inc;
+    s_angle = wrap(s_angle + ((float)s_inc / (float)Q16) *
+                   (TWO_PI_F * (float)g_foc.pole_pairs / (float)RAW_TURN) *
+                   (float)g_foc.sensor_direction);
+    g_foc.comm_angle_e = s_angle;
+    g_foc.comm_override = 1;
+    s_vq = cap_vq(INT32_MAX);
+    if (s_spin_stopping && s_inc == 0) { finish(); return; }
+    if (s_spin_stop_deadline &&
+        (int32_t)(s_ticks - s_spin_stop_deadline) >= 0) {
+      finish();
+      return;
+    }
+  } else {
     int64_t position = (s_pos - s_start_pos) * Q16;
-    float e = (float)(s_cmd - position) / Q16;
     int64_t prev = s_cmd;
-    float fol = g_motion_cfg.err_follow;
-    if ((s_inc > 0 && e < fol) || (s_inc < 0 && e > -fol)) {
+    float e;
+    if (s_mode == SPIN) {
+      uint32_t host_limit = SPIN_TIMEOUT_MS * s_hz / 1000u;
+      if (!s_spin_stopping &&
+          (uint32_t)(s_ticks - s_spin_last_host_tick) > host_limit) {
+        s_spin_stopping = 1;
+        s_spin_inc_target = 0;
+        s_spin_zero_ticks = 0;
+        s_spin_stop_deadline = s_ticks +
+                               (SPIN_STOP_TIMEOUT_MS * s_hz / 1000u);
+        s_spin_timedout = 1;
+      }
+      int64_t rate = s_spin_stopping ? 0 : s_spin_inc_target;
+      if (s_inc < rate) {
+        s_inc += s_spin_accel_step;
+        if (s_inc > rate) s_inc = rate;
+      } else if (s_inc > rate) {
+        s_inc -= s_spin_accel_step;
+        if (s_inc < rate) s_inc = rate;
+      }
       s_cmd += s_inc;
-      if ((s_inc > 0 && s_cmd > s_target) || (s_inc < 0 && s_cmd < s_target))
-        s_cmd = s_target;
+    } else {
+      if ((uint64_t)s_ticks * 1000 / s_hz > s_timeout) {
+        abort_move("timeout"); return;
+      }
+      e = (float)(s_cmd - position) / Q16;
+      float fol = g_motion_cfg.err_follow;
+      if ((s_inc > 0 && e < fol) || (s_inc < 0 && e > -fol)) {
+        s_cmd += s_inc;
+        if ((s_inc > 0 && s_cmd > s_target) || (s_inc < 0 && s_cmd < s_target))
+          s_cmd = s_target;
+      }
     }
     e = (float)(s_cmd - position) / Q16;
     s_err = (int32_t)e;
     if (fabsf(e) > g_motion_cfg.err_limit) { abort_move("stall (error > limit)"); return; }
     if (!hybrid_step((float)(s_cmd - prev) / Q16)) return;
-    float lim = cap_vq(g_motion_cfg.vq_max);
+    float lim = (s_mode == SPIN)
+              ? (float)cap_vq(INT32_MAX)
+              : (float)cap_vq(g_motion_cfg.vq_max);
     float vel_cmd = (float)(s_cmd - prev) * s_hz / Q16;
     float damping = g_motion_cfg.kd * (vel_cmd - s_vel);
     if (damping > lim * .25f) damping = lim * .25f;
@@ -403,7 +614,7 @@ void motion_step_isr(void)
     if (u > lim) u = lim;
     if (u < -lim) u = -lim;
     s_vq = (int32_t)u;
-    if (s_cmd == s_target) {
+    if (s_mode == POSITION && s_cmd == s_target) {
       if (fabsf(e) < band) {
         if (++s_inband >= s_hz / 20) { finish(); return; }
       } else s_inband = 0;
@@ -413,6 +624,17 @@ void motion_step_isr(void)
           abort_move("target not reached (blocked)"); return;
         }
       } else { s_stuck_pos = s_pos; s_stuck_ticks = 0; }
+    }
+    if (s_mode == SPIN && s_spin_stopping) {
+      int32_t av = s_vel_meas < 0 ? -s_vel_meas : s_vel_meas;
+      if (s_inc == 0 && av <= SPIN_STOP_VEL_RAWPS) {
+        if (++s_spin_zero_ticks >= s_hz / 10u) { finish(); return; }
+      } else s_spin_zero_ticks = 0;
+      if (s_spin_stop_deadline &&
+          (int32_t)(s_ticks - s_spin_stop_deadline) >= 0) {
+        finish();
+        return;
+      }
     }
   }
   g_foc.torque_q = s_vq;
