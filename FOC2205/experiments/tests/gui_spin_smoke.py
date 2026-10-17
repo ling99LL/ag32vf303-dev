@@ -37,13 +37,20 @@ def main():
         if not wait_for(root, lambda: app.model.fresh(time.monotonic()) and
                         app.model.can_drive(time.monotonic()), 6.0):
             raise RuntimeError('panel did not receive a ready status')
+        if (app.spin_speed_scale.cget('from') != 3 or
+                app.spin_speed_scale.cget('to') != 60):
+            raise RuntimeError('speed slider range is not 3-60 rpm')
+        if not app.btn_stop.cget('text').startswith('紧急停止'):
+            raise RuntimeError('emergency-stop button is not wired')
+        if any(name not in app.current_vars for name in 'ABC'):
+            raise RuntimeError('phase-current labels are missing')
 
         app.spin_mode.set('closed')
         app.spin_speed_rpm.set(6)
         app._spin_speed_changed()
         app.spin_power.set(20)
         app.spin_dir.set(1)
-        app._toggle_spin()
+        app.btn_spin.invoke()
 
         if not wait_for(root, lambda: app.model.spin_active(time.monotonic()), 3.0):
             status = app.model.status.values if app.model.status else None
@@ -75,7 +82,8 @@ def main():
             raise RuntimeError(
                 f'velocity tracking failed: target={target_rpm:.2f} '
                 f'measured_mean={measured_rpm:.2f} rpm samples={measured[-8:]}')
-        app.spin_speed_rpm.set(12)
+        app.spin_speed_scale.set(12)
+        app._spin_speed_changed()
         app._apply_spin_speed()
         if not wait_for(root, lambda: app.model.status is not None and
                         'vsp' in app.model.status.values and
@@ -102,7 +110,7 @@ def main():
             raise RuntimeError('phase-current display did not update')
 
         estop_sent = time.monotonic()
-        app._emergency_stop()
+        app.btn_stop.invoke()
         if not wait_for(root, lambda: app.model.status is not None and
                         app.model.status['st'] in (0, 4) and
                         app.model.status['out'] == 0, 2.5):

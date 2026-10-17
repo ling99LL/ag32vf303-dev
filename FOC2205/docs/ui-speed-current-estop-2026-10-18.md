@@ -41,6 +41,29 @@ settled and measured a 13.32 rpm mean. The final smoke test waits 2.5 s after
 the slider change, then measures a 2.5 s steady-state window; the 1.3 rpm
 tolerance was not relaxed.
 
+## Widget-level follow-up
+
+The smoke test now exercises the actual Tk widgets rather than calling private
+control methods directly:
+
+- `btn_spin.invoke()` starts closed-loop SPIN;
+- the 3-60 rpm slider is moved to 12 rpm and its release path is applied;
+- `btn_stop.invoke()` sends the emergency-stop command.
+
+Repeated COM26 runs on 2026-10-18 passed. The steady 6/12 rpm means were
+5.73/11.80 rpm in the hidden-window run; visible-window feedback was
+11.30-12.35 rpm at a 12.00 rpm target. A/B/C current labels showed live ADC
+values while running, ISR stayed at 20,005 Hz, and emergency-stop release took
+0.56-0.67 s in the visible runs (`0.70 s` in the hidden run). Final status was
+`st=0, out=0, fault=''`.
+
+Additional evidence:
+
+- `experiments/logs/powered-20261018/gui-widget-controls-smoke.txt`
+- `experiments/logs/powered-20261018/ui-test-running-12rpm-full.png`
+- `experiments/logs/powered-20261018/ui-test-estop-confirmed-full.png`
+- `experiments/logs/powered-20261018/ui-test-running-currents-full.png`
+
 ## Logs
 
 - `experiments/logs/powered-20261018/run_tests.txt`
