@@ -4,6 +4,8 @@ AGM（遨格芯）AG32 系列把 RISC-V MCU 和 2K LE 的 CPLD 做进同一颗�
 
 这个仓库围绕 AG32VF303KCU6（QFN-32）做了几个工程，也记录了开发环境是怎么搭起来的。各目录是独立工程，各有自己的 platformio.ini。
 
+**找文件先看 [INDEX.md](INDEX.md)** —— 工程总览、完整目录树、散件归档去向和命名约定都在那里。本文件只讲“怎么跑”。
+
 ## 工程
 
 - **`Logic/`** — 4 通道逻辑分析仪。CPLD 纯硬件同步采样，硬件触发加预触发，样本进 Block RAM，MCU 经总线读出来走 USB CDC。协议是 SUMP，PulseView 直接连。板载信号发生器：PIN_11 DAC 任意波形（正弦/方波/锯齿/三角）+ PIN_5 数字方波 1 Hz~100 MHz / 延时触发引擎，上位机 `Logic/tools/run_wavegen.bat`（见 [Logic/README.md](Logic/README.md) §9）。实测指标和协议分析见 [Logic/PERFORMANCE_REPORT.md](Logic/PERFORMANCE_REPORT.md)。
@@ -12,21 +14,28 @@ AGM（遨格芯）AG32 系列把 RISC-V MCU 和 2K LE 的 CPLD 做进同一颗�
 - **`projects/can_uart_test/`** — CAN 与 UART 的引脚复用、回环测试。
 - **`foc/foc_knob/`** — FOC 力反馈旋钮的早期原型，带 host 上位机和 probe/reset 脚本。
 - **`example/`、`example_logic_led/`** — AGM 官方例程原件，只读，别改。
-- **`docs/`** — 交接文档和官方 PDF。其中 [HANDOVER.md](docs/HANDOVER.md) 汇总了环境搭建、烧录流程、排障表，动手前先看它。
+- **`FOC2205/docs/hardware/`** — FOC 驱动板的板级资料：原理图、EasyEDA 网表、MT6701/DRV8316/晶振/ESD/LED 规格书，以及原理图审查导出。
+- **`tools/`** — 工作区级调试探针：`openocd/` 直读 PC/Flash/GPIO/UART 寄存器，`supra/` 器件库自检。
+- **`docs/`** — 工作区级文档：交接文档和官方 PDF。其中 [HANDOVER.md](docs/HANDOVER.md) 汇总了环境搭建、烧录流程、排障表，动手前先看它。
 
 ## 目录
 
 ```text
+INDEX.md                        总索引：工程总览 + 目录树 + 归档去向（先看它）
 AGENTS.md                       工作区约定与硬性规则
-docs/
+docs/                           工作区级文档（交接文档 + 官方 PDF）
   HANDOVER.md                   环境搭建、烧录流程、排障表、纯 CPLD 编译
   AGM_DAP_LINK_Rev2.51.pdf      DAPLink 手册（p.12-13 是 QFN32 完整引脚表）
 Logic/                          逻辑分析仪
+  captures/                     VCD 抓图与连接验证截图
 FOC2205/                        FOC 驱动板
+  docs/hardware/                原理图 + 网表 + 器件规格书 + EasyEDA 审查导出
 projects/ag32vf303_flowled/     流水灯验证
 projects/can_uart_test/         CAN/UART 复用测试
 foc/foc_knob/                   力反馈旋钮原型
+tools/                          工作区级调试探针（openocd / supra）
 example/  example_logic_led/    官方例程（只读）
+ref-smartknob/                  SmartKnob 上游参考（只读）
 ```
 
 ## 环境搭建

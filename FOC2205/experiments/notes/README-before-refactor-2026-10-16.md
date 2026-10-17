@@ -74,7 +74,7 @@ sincos LUT）；prelogic 0 错 0 警；Quartus 0 errors；Supra 0 errors；`logi
 
 ## 新板卡适配（2026-10-14 完成并上板验证）
 
-新板资料：`docs/FOC驱动板原理图.pdf`、`docs/SimpleFOCMini-v2_netlist.md`（嘉立创工程名 SimpleFOCMini-v2）。
+新板资料：`FOC2205/docs/hardware/FOC驱动板原理图.pdf`、`FOC2205/docs/hardware/SimpleFOCMini-v2_netlist.md`（2026-10-17 由工作区 `docs/` 迁入）（嘉立创工程名 SimpleFOCMini-v2）。
 
 **引脚层面零改动**：新板 MCU 侧 32 脚中有 31 脚与既有 `foc2205.ve` 一致，唯一差异是 PIN_1 预留了
 50MHz 有源晶振（IO_GB 脚），实际未焊接 —— 所以 `.ve` 未改、无需 prelogic。

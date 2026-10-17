@@ -16,3 +16,4 @@ logic/logic_log.txt
 !logic/analog_ip.v
 !logic/ahb2apb.v
 !logic/example_board.v
+!captures/*.vcd

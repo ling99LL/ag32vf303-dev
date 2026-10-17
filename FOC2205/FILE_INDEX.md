@@ -1,6 +1,6 @@
 # FOC2205 文件导航
 
-更新：2026-10-17。硬件和功能入口见 README；重构与复查证据见 `docs/refactor-audit-2026-10-16.md`、`docs/code-audit-2026-10-16.md`，最新通电实测见 `docs/smoothness-2026-10-17.md` 与 `docs/powered-debug-2026-10-17.md`（历史：`docs/powered-debug-2026-10-16.md`）。历史调参快照在 `experiments/notes/`，不用于判断当前功能。
+更新：2026-10-17（板级硬件资料归入 `docs/hardware/`）。工作区总索引见根目录 `INDEX.md`。硬件和功能入口见 README；重构与复查证据见 `docs/refactor-audit-2026-10-16.md`、`docs/code-audit-2026-10-16.md`，最新通电实测见 `docs/smoothness-2026-10-17.md` 与 `docs/powered-debug-2026-10-17.md`（历史：`docs/powered-debug-2026-10-16.md`）。历史调参快照在 `experiments/notes/`，不用于判断当前功能。
 
 | 文件或目录 | 用途 |
 |---|---|
@@ -58,5 +58,9 @@
 | `docs/powered-debug-2026-10-17.md` | 过流判别（连续 3 拍+峰值/快照）与电流环首轮：坏窗口 E/D 决定性实验、真实 n=3 跳闸样本、定位/取证脚本与日志清单 |
 | `docs/smoothness-2026-10-17.md` | 闭环平滑扫描（hyb=0）：速度×力度矩阵与重复性、hybrid 致 ISR 20 kHz→~12 kHz 定性、运动 kp=8 + kd60 + filt256 推荐配置与开机序列、kp=2/kp=8 五连圈验收、力度上限表、24 圈 soak、30 rpm 起步失败模式 |
 | `docs/*接线设计.md`、`*引脚*.md`、`*网表.md` | 硬件设计资料；当前引脚以 VE 为准 |
-| `docs/*规格书*.PDF`、`docs/drv8316_text.txt`、`电机参数.jpg/md` | 官方规格书（含 DRV8316C 文本提取）和电机参数 |
+| `docs/hardware/` | **板级硬件资料总目录**：原理图、EasyEDA 网表、器件规格书（详见其 README） |
+| `docs/hardware/FOC驱动板原理图.pdf`、`docs/hardware/SimpleFOCMini-v2_netlist.md` | 自研板原理图与 EasyEDA 原生网表（工程名 SimpleFOCMini-v2） |
+| `docs/hardware/datasheets/` | 器件规格书：MT6701QT-STD、DRV8316CRRGFR、DRV8316(TI)、50MHz 晶振、USBLC6-2P6 ESD、GL0603UG01 LED + 商城页存档 |
+| `docs/hardware/easyeda-review/` | EasyEDA 原理图审查原始 JSON 导出（不入库） |
+| `docs/电机参数.jpg/md` | 电机参数（2205/2804）原图与文本转录 |
 | `docs/FOC2205_审查结果交付文档.md` | 先前审查整改历史 |

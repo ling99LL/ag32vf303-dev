@@ -49,6 +49,7 @@ smartknob-master.tar.gz
 
 # Session/tool temp state (EasyEDA review extracts, work journal)
 .tmp_sch_review/
+FOC2205/docs/hardware/easyeda-review/
 .workbuddy/
 
 # OS junk

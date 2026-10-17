@@ -4,6 +4,7 @@
 
 ## 权威文档（改动敏感区域前先读）
 
+- **`INDEX.md`** — 工作区**总索引**：工程总览、目录树、散件归档去向、命名约定。找文件先看它。
 - **`docs/HANDOVER.md`** — 环境总览、烧录流程、排障表、纯 CPLD 三段式编译（§9）、QFN32 引脚表出处。任何 AG32 操作前必读。
 - `.zcode/skills/ag32-dev/SKILL.md` — AG32 开发 skill（命令速查 + 硬性规则）。
 - `docs/AGM_DAP_LINK_Rev2.51.pdf` — DAPLink 手册，p.12-13 是 QFN32 完整引脚表。
@@ -20,7 +21,18 @@
 | `FOC2205/` | AG32VF303KCU6(QFN32)+MT6701QT-STD+DRV8316C 三芯片 FOC 驱动板，2205 电机力反馈旋钮；**与 `foc/foc_knob` 零交叉的独立工程**，`foc2205.ve` + `logic/`(ADC×3 + SPI mode1 桥×2) |
 | `Logic/` | AG32VF303 4 通道逻辑分析仪（方案 B：CPLD 硬件采样），SUMP/OLS 协议直连 PulseView/Sigrok；`logic_board.ve` + USB CDC + 性能实测报告 |
 | `ref-smartknob/` | scottbez1/smartknob 参考源码副本（只读参考） |
-| `docs/` | 交接文档与官方 PDF 归档 |
+| `FOC2205/docs/hardware/` | FOC 驱动板板级硬件资料：原理图、EasyEDA 网表、器件规格书（MT6701/DRV8316/OSC/ESD/LED）、原理图审查导出 |
+| `Logic/captures/` | 逻辑分析仪 VCD 抓图与连接验证截图 |
+| `tools/` | 工作区级调试探针（`openocd/` 直读寄存器、`supra/` 器件自检），不绑定单一工程 |
+| `docs/` | 工作区级文档：`HANDOVER.md` 交接文档 + 官方 PDF 归档（工程专属资料归各工程目录） |
+
+## 归档与索引约定
+
+- **先看 `INDEX.md`**：任何“这个文件在哪 / 该放哪”的问题，以根目录 `INDEX.md` 为唯一入口索引。
+- **按工程归档**：文件放进它所属的工程目录；只有跨工程共用的才进 `docs/`、`tools/`、`example*/`。工作区根目录只保留 `INDEX.md` / `README.md` / `AGENTS.md` / 各工程目录。
+- **新增或移动顶层目录、工程 → 同步更新 `INDEX.md`**；工程内部增删 → 更新该工程的 `README.md` 或 `FILE_INDEX.md`。
+- **器件资料命名**：`<器件型号>_<类别>_<来源>`（例：`DRV8316_TI-SLVSF16B_datasheet.pdf`、`GL0603UG01_LED_lcsc-54645989.html`）。**同名歧义必须靠文件名区分**（如 DRV8316 与板载 DRV8316C 是两份不同手册）。
+- 生成物（`.pio/`、`logic/db/`、`quartus_logs/`、`__pycache__/`、EasyEDA 审查导出）一律不入库。
 
 ## 工具链与命令
 
