@@ -250,15 +250,16 @@ static void test_console_and_blockage(void)
 static void test_long_trajectory(void)
 {
   reset(); motion_hybrid_enable(0);
-  assert(motion_start_turns(200.0f,2.0f,100));
-  // Track the commanded two rev/s for 200 turns; absolute float accumulation
-  // used to lose the small step as cumulative position grew.
-  for (unsigned n=1;n<=100000;++n) {
-    angle = (int)((uint64_t)n * 2 * 16384 / 1000) & 16383;
+  assert(motion_start_turns(200.0f,0.2f,100));
+  // Track a 0.2 rev/s ideal rotor for 200 turns. The lower speed leaves the
+  // new 0.75 rev/s^2 position-command ramp inside the test's 2048-raw error
+  // window while still exercising 64-bit position accumulation over 200 turns.
+  for (unsigned n=1;n<=1000000;++n) {
+    angle = (int)((uint64_t)n * 16384 / 5000) & 16383;
     tick(1);
     assert(motion_state()==MOTION_RUN || motion_state()==MOTION_DONE);
   }
-  angle=0; tick(100);
+  angle=0; tick(1000);
   assert(motion_state()==MOTION_DONE && !enabled);
   assert(motion_travelled_raw()==200*16384);
   assert(motion_final_err_raw() < 2 && motion_final_err_raw() > -2);

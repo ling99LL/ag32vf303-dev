@@ -155,7 +155,7 @@ static void print_status_frame(void)
   foc_oc_get(&oc);
   printf("#FOC,proto=2,ang=%d,deg=%u.%u,crc=%u,ia=%d,ib=%d,ic=%d,mode=%d,mask=%u,pct=%d,"
          "drv=0x%02x,vq=%ld,iacc=%ld,err=%ld,vel=%ld,st=%d,hyb=%d,slip=%ld,"
-         "diag=1,fw=20261017.10,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
+         "diag=1,fw=20261017.12,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
          "drvok=%d,encok=%d,mg=%u,adcok=%d,cal=%d,adce=%u,brk=%d,out=%d,"
          "cl=%d,open=%d,id=%d,iq=%d,iref=%ld,ipa=%d,ipb=%d,ipc=%d,ocn=%u,ocmx=%u,ocg=%u,fault=%s\n",
          (int)ang, (unsigned)(deg10 / 10u), (unsigned)(deg10 % 10u),

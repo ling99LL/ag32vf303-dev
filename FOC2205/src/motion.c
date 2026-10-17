@@ -19,6 +19,7 @@
 #define SPIN_RPS_MAX 1.00f
 #define SPIN_ACCEL_RAWPS2 12288          // 0.75 turn/s^2
 #define SPIN_STOP_VEL_RAWPS (RAW_TURN / 100)
+#define MOTION_POS_ACCEL_RPS2 0.75f
 
 motion_cfg_t g_motion_cfg = {
   .kp=2.0f, .kd=0.02f, .kd_hold=0.0f, .ki=1.5f,
@@ -28,7 +29,7 @@ motion_cfg_t g_motion_cfg = {
   .hyb_corr_pct=0.35f, .hyb_corr_floor=0.05f
 };
 #ifndef MOTION_HYBRID_DEFAULT
-#define MOTION_HYBRID_DEFAULT 1
+#define MOTION_HYBRID_DEFAULT 0
 #endif
 
 typedef enum { POSITION, OPENLOOP, TORQUE, MANUAL, SPIN } motion_mode_t;
@@ -53,6 +54,7 @@ static uint32_t s_corrections;
 static int32_t s_fixed_vq, s_man_pct = 10;
 static uint8_t s_man_mask = 1;
 static int64_t s_spin_inc_target, s_spin_accel_step;
+static int64_t s_pos_inc_target, s_pos_accel_step;
 static int s_spin_pct = SPIN_POWER_PCT_DEFAULT, s_spin_stopping, s_spin_timedout;
 static int s_spin_openloop;
 static int8_t s_spin_dir = 1;
@@ -216,8 +218,12 @@ int motion_start_turns(float turns, float rps, int32_t vq)
   if (s_timeout > MAX_DURATION_MS) s_timeout = MAX_DURATION_MS;
   s_cmd = 0;
   s_target = (int64_t)(turns * RAW_TURN * (float)Q16);
-  s_inc = (int64_t)(rps * RAW_TURN * (float)Q16 / s_hz);
-  if (turns < 0) s_inc = -s_inc;
+  s_pos_inc_target = (int64_t)(rps * RAW_TURN * (float)Q16 / s_hz);
+  if (turns < 0) s_pos_inc_target = -s_pos_inc_target;
+  s_pos_accel_step = (int64_t)(MOTION_POS_ACCEL_RPS2 * RAW_TURN * (float)Q16 /
+                              ((float)s_hz * (float)s_hz));
+  if (s_pos_accel_step < 1) s_pos_accel_step = 1;
+  s_inc = 0;
   ok = begin(POSITION, 0);
 done:
   control_unlock(key);
@@ -490,6 +496,41 @@ static int hybrid_step(float advance)
   g_foc.comm_override = 1;
   return 1;
 }
+static uint64_t abs64u(int64_t v)
+{
+  return v < 0 ? (uint64_t)(-v) : (uint64_t)v;
+}
+
+// Trapezoidal position-command trajectory. The old code applied the full
+// cruise step on the first ISR tick, which caused a torque/current kick at
+// 0.50 rev/s and could trip the current judge. Ramp toward the cruise step and
+// start braking when the remaining distance is within the discrete stopping
+// distance. The position loop still closes on the real encoder error.
+static void position_advance(void)
+{
+  int64_t remaining = s_target - s_cmd;
+  if (remaining == 0) { s_inc = 0; return; }
+  int64_t dir = remaining > 0 ? 1 : -1;
+  uint64_t rem = abs64u(remaining);
+  uint64_t inc = abs64u(s_inc);
+  if ((s_inc > 0) != (dir > 0)) { s_inc = 0; inc = 0; }
+  uint64_t desired = abs64u(s_pos_inc_target);
+  uint64_t stop = inc * inc / (2ull * (uint64_t)s_pos_accel_step);
+  if (rem <= stop) desired = 0;
+  if (rem <= inc) desired = rem;       // exact final step, including sub-step distance
+  int64_t rate = dir > 0 ? (int64_t)desired : -(int64_t)desired;
+  if (s_inc < rate) {
+    s_inc += s_pos_accel_step;
+    if (s_inc > rate) s_inc = rate;
+  } else if (s_inc > rate) {
+    s_inc -= s_pos_accel_step;
+    if (s_inc < rate) s_inc = rate;
+  }
+  s_cmd += s_inc;
+  if (dir > 0 && s_cmd > s_target) s_cmd = s_target;
+  if (dir < 0 && s_cmd < s_target) s_cmd = s_target;
+}
+
 static void finish(void)
 {
   s_final_err = s_err;
@@ -582,11 +623,9 @@ void motion_step_isr(void)
       }
       e = (float)(s_cmd - position) / Q16;
       float fol = g_motion_cfg.err_follow;
-      if ((s_inc > 0 && e < fol) || (s_inc < 0 && e > -fol)) {
-        s_cmd += s_inc;
-        if ((s_inc > 0 && s_cmd > s_target) || (s_inc < 0 && s_cmd < s_target))
-          s_cmd = s_target;
-      }
+      if ((s_inc > 0 && e < fol) || (s_inc < 0 && e > -fol) ||
+          (s_inc == 0 && fabsf(e) < g_motion_cfg.err_limit))
+        position_advance();
     }
     e = (float)(s_cmd - position) / Q16;
     s_err = (int32_t)e;

@@ -42,7 +42,7 @@
 | `experiments/tests/calibrate.py` | 校准运行器：`s`→`a`→轮询 `calst=7/9`，兼作校准链路看门狗喂狗 |
 | `experiments/tests/accept_closedloop.py` | 闭环验收运行器：连发 N 个单圈位置伺服，逐圈报告位移/误差/调制/反向步进/glitch |
 | `experiments/tests/spin/` | 无限旋转验收：`accept_spin.py` 按 20/40/60/80% × V1–V4 × 正反方向自动喂 100 ms 心跳、逐档停转读 `F`，并验证 3.5 s 失联减速释放；`capture_spin.py` 20 Hz 稳态遥测/FFT 纹波诊断；`wait_and_run.py` 等待冷上电后自动校准并执行整套矩阵；`flash_then_auto.py` 等待 ROM UART loader，按“MCU→CPLD→回读比对”烧写后接续测试 |
-| `experiments/tests/current_loop/` | 电流环/过流取证：`accept_current_loop.py`（A/B 段）、`snap_walk2.py`+`walk_one.py`（坏窗口定位）、`set_preset.py`/`prep_ED.py`（配置对齐）、`run_window_move.py`（单步 E/D 取证）、`final_state.py`（收尾）；平滑扫描：`smoothness_sweep.py`（速度×力度/调参/候选/验收矩阵，`--blocks matrix,slow,ref,repeat,gains,tune,cand,candmat,candrep,kiscan,slow2,fast,posgain,accept5,accept8,force8,slow8,soak` 选择）、`hyb_rate_test.py`（hybrid-ISR 速率对照）、`session_close.py`（候选确认收尾）、`smooth_analyze.py`（日志离析） |
+| `experiments/tests/current_loop/` | 电流环/过流取证：`accept_current_loop.py`（A/B 段）、`snap_walk2.py`+`walk_one.py`（坏窗口定位）、`set_preset.py`/`prep_ED.py`（配置对齐）、`run_window_move.py`（单步 E/D 取证）、`final_state.py`（收尾）；平滑扫描：`smoothness_sweep.py`（速度×力度/调参/候选/验收矩阵，`--blocks matrix,slow,ref,repeat,gains,tune,cand,candmat,candrep,kiscan,slow2,fast,edges12,posgain,accept5,accept8,force8,slow8,soak` 选择）、`hyb_rate_test.py`（hybrid-ISR 速率对照）、`session_close.py`（候选确认收尾）、`smooth_analyze.py`（日志离析） |
 | `experiments/tests/force_sweep/` | 力度档扫描：探针精写 `vq_max` 后单圈运行、跳闸自动 `z` 恢复重试；`recover.py`/`jog.py`/`restore_cfg.py` 辅助 |
 | `experiments/probes/`、`archive_manifest.csv` | 40 个历史探测脚本与 1 个 APB_CLKEN 探测输出原样归档 + 路径/大小/SHA256 清单；相对路径不作运行保证 |
 | `experiments/notes/` | 历史调参叙述、规格书文本提取、旧 README；不代表当前版本 |
@@ -58,6 +58,8 @@
 | `docs/powered-debug-2026-10-16.md` | 通电调试：SPI 超时修复、总线桥验证、停止 BRK 与起步反抽的根因和修复、六组合五圈验收、nFAULT 硬件断路通道验证、闭环首轮与过流跳闸、力度档扫描 5–25% 与起步跳闸按起始电角度归因 |
 | `docs/powered-debug-2026-10-17.md` | 过流判别（连续 3 拍+峰值/快照）与电流环首轮：坏窗口 E/D 决定性实验、真实 n=3 跳闸样本、定位/取证脚本与日志清单 |
 | `docs/smoothness-2026-10-17.md` | 闭环平滑扫描（hyb=0）：速度×力度矩阵与重复性、hybrid 致 ISR 20 kHz→~12 kHz 定性、运动 kp=8 + kd60 + filt256 推荐配置与开机序列、kp=2/kp=8 五连圈验收、力度上限表、24 圈 soak、30 rpm 起步失败模式 |
+| `docs/openloop-repeat-2026-10-17.md` | `fw=20261017.11` 开环六组合重复性：3/6/15 rpm 正反向各 5 圈，全部通过，零反向步进/零 glitch |
+| `docs/position-accel-2026-10-17.md` | `fw=20261017.12` 位置轨迹加减速：0.25/1536 10/10、0.50/1013/768 各 10/10、0.50/1536/2048 各 2/2，全部 DONE，无起步跳闸 |
 | `docs/spin-acceptance-2026-10-17.md` | `fw=20261017.5` SPIN 24 档与位置闭环 force8 验收：24/24 PASS、失联保护、编码器状态位 100 ms 判据、串口烧录顺序与 nRST 结论 |
 | `docs/*接线设计.md`、`*引脚*.md`、`*网表.md` | 硬件设计资料；当前引脚以 VE 为准 |
 | `docs/hardware/` | **板级硬件资料总目录**：原理图、EasyEDA 网表、器件规格书（详见其 README） |

@@ -24,6 +24,8 @@ Blocks (all moves are 1-turn r / R closed-loop on the accept config):
   accept8: same as accept5 but motion kp 8 (cross-speed check of the kp8 win)
   force8 : kp=8 force slices at 0.05/0.10/0.25 (low+max force, 2 turns each)
   slow8  : kp=8 at 0.02 rev/s (2 turns)
+  edges12: fw .12 position acceleration-ramp regression at 0.25/1536
+           and 0.50/1013/768, kp=8 loop ON, 5 pairs per condition
   soak   : 0.10/2048 alternating r/R x12 pairs, drift watch (crc/adce deltas)
 
 Per move: MOVE DONE elapsed/residual/jitter, host-side device-time velocity
@@ -450,8 +452,13 @@ def main():
         say('P0 fw=%s up=%s st=%s out=%s ready=%s cl=%s ang=%s'
             % (f.get('fw'), f.get('up'), f.get('st'), f.get('out'),
                f.get('ready'), f.get('cl'), f.get('ang')))
-        if f.get('fw') != '20261017.10':
-            say('FATAL: unexpected firmware %s' % f.get('fw'))
+        fw = f.get('fw', '')
+        try:
+            fw_build = int(fw.rsplit('.', 1)[-1])
+        except (AttributeError, ValueError):
+            fw_build = -1
+        if not fw.startswith('20261017.') or fw_build < 10:
+            say('FATAL: unexpected firmware %s (need >=20261017.10)' % fw)
             return
         if f.get('st') == '3' and not recover('pre'):
             say('FATAL: fault not recoverable at start')
@@ -587,6 +594,19 @@ def main():
                 set_vqmax(2048); two('F2-F2048')
             else:
                 say('fast: skipping block, speed gear mismatch (would run at %s)' % cfg.get('speed'))
+        if 'edges12' in BLOCKS:
+            say('===== BLOCK edges12: position accel ramp, kp=8 loop ON =====')
+            set_loop(True)
+            seek('j', 'kd', '60/1000'); seek('q', 'ang_filt', '1/256'); seek('k', 'kp', '8')
+            set_speed('0.25'); set_vqmax(1536)
+            for i in range(5): two('E12-S025-F1536-%d' % i)
+            set_speed('0.50'); set_vqmax(1013)
+            for i in range(5): two('E12-S050-F1013-%d' % i)
+            set_vqmax(768)
+            for i in range(5): two('E12-S050-F768-%d' % i)
+            seek('k', 'kp', '2')
+            set_loop(False)
+            set_speed('0.05'); set_vqmax(2048)
         if 'posgain' in BLOCKS:
             say('===== BLOCK posgain: motion kp/ki/kd/follow scan (0.05/2048, loop ON) =====')
             set_loop(True)
