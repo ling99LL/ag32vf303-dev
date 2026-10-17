@@ -1,6 +1,6 @@
 # FOC2205 文件导航
 
-更新：2026-10-18（在 m0–m4 与闭环速度 PI 基础上新增连续 rpm 滑块、三相电流高频显示、立即急停和上位机滚动布局）。工作区总索引见根目录 `INDEX.md`。硬件和功能入口见 README；最新闭环结论见 `docs/closed-loop-velocity-2026-10-17.md` 与 `docs/foc2205-fw-20261017.25-release.md`，重构与复查证据见 `docs/refactor-audit-2026-10-16.md`、`docs/code-audit-2026-10-16.md`，历史平滑与通电记录见 `docs/smoothness-2026-10-17.md` 与 `docs/powered-debug-2026-10-17.md`。历史调参快照在 `experiments/notes/`，不用于判断当前功能。
+更新：2026-10-18（`fw=20261017.27` 完成 m1 更强阻尼和 m4 单向边界/5° 静默捕获带微调；`.25` 的连续 rpm 滑块、三相电流高频显示、立即急停和上位机滚动布局保持不变）。工作区总索引见根目录 `INDEX.md`。硬件和功能入口见 README；最新跟随调参见 `docs/haptic-m1-m4-followup-2026-10-18.md`，完整 `.26` 手感矩阵见 `docs/haptic-smartknob-port-2026-10-18.md`，闭环结论见 `docs/closed-loop-velocity-2026-10-17.md` 与 `docs/foc2205-fw-20261017.25-release.md`。
 
 | 文件或目录 | 用途 |
 |---|---|
@@ -19,7 +19,7 @@
 | `src/app_io.c/h` | GPIO/SPI 初始化、限时单相 SPI 传输、延时 |
 | `src/analog_ip.h` | CPLD ADC 与外设寄存器定义 |
 | `src/build_config.h` | 构建期安全门：默认镜像禁止访问 0x6000xxxx CPLD 窗口 |
-| `src/haptic.c/h` | m0 自由 / m1 阻尼 / m2 惯性 / m3 原生连续角挡位 / m4 有界回拉，统一 Q12 力矩算法与状态 |
+| `src/haptic.c/h` | m0 自由 / m1 阻尼 / m2 惯性 / m3 SmartKnob 挡位状态机 / m4 边界两侧回拉速度伺服，统一 Q12 力矩算法与状态 |
 | `logic/analog_ip.v` | 三 ADC 硬宏、AHB/APB 外设和 SPI 桥实例 |
 | `logic/spi_mode_wrap.v` | SPI 重定时、接收锁存、APB 状态 |
 | `logic/ahb2apb.v`、`logic/reg_ctrl.v` | SDK 总线与寄存器桥 |
@@ -36,8 +36,8 @@
 | `tools/uart_flash_probe.bat`、`uart_flash_all.bat` | UART ISP：BOOT0=3V3+断电重启后探测 / 全量重烧（先 logic 后程序） |
 | `experiments/tests/run_tests.py`、`control_regression.c`、`stubs/` | 主机回归入口：GCC 编译实际控制源码+硬件桩，覆盖闭环速度 PI、m0–m4、看门狗、协议与 Python 语法 |
 | `experiments/tests/test_panel_protocol.py` | 协议 v3、速度环字段、`cl/open` 强类型、手感状态门控、`$T` 错帧与操作条件单元测试 |
-| `experiments/tests/gui_spin_smoke.py`、`gui_position_smoke.py` | 隐藏 Tk 实连 COM26：闭环 SPIN 6→12 rpm 连续改速、三相电流显示、`estop` 释放时延，以及 `rot ±360` 面板按钮端到端验收 |
-| `experiments/tests/haptic/` | m0–m4 自动验收：`haptic_mode_probe.py`、`haptic_wall_probe.py`、串口/指标公共模块；输出 summary JSON、逐例 CSV 和串口日志 |
+| `experiments/tests/gui_spin_smoke.py`、`gui_position_smoke.py`、`gui_haptic_smoke.py` | 隐藏 Tk 实连 COM26：闭环 SPIN 6→12 rpm 连续改速、三相电流显示、`estop` 释放时延、`rot ±360`，以及 m0/m1/m2 按钮、14 个手感参数和 `kd=0.45` 默认值 |
+| `experiments/tests/haptic/` | m0–m4 自动验收：`haptic_mode_probe.py`、`haptic_wall_probe.py`、17 字段遥测解析、低压 `rot` 失败后的 12% 手动六步摆位回退；输出 summary JSON、逐例 CSV 和串口日志 |
 | `experiments/tests/hardware_unpowered.py` | 实板负向测试：驱动未供电时验证故障上报与命令拒绝 |
 | `experiments/tests/ahb2apb_tb.v` | AHB2APB 桥 Verilog 测试台 |
 | `experiments/tests/accept_openloop.py` | 开环验收运行器：绝对设定调制/速度档，跑 5 圈并逐帧展开编码器机械角 |
@@ -66,6 +66,8 @@
 | `docs/closed-loop-velocity-2026-10-17.md` | `fw=20261017.24` 闭环速度 PI + 同步换向前馈：根因、SimpleFOC 参考、V1–V4/40%/80% 矩阵、开环/电流环对照、GUI/位置实连与 WDOG 恢复 |
 | `docs/foc2205-fw-20261017.24-release.md` | GitHub 发布备注：`fw=20261017.24`、tag `foc2205-fw-20261017.24`、闭环 PASS、验证矩阵与上位机结论 |
 | `docs/foc2205-fw-20261017.25-release.md` | GitHub 发布备注：`fw=20261017.25`、连续 rpm、三相电流遥测、立即急停、GUI 实连与自动回归结论 |
+| `docs/haptic-smartknob-port-2026-10-18.md` | `fw=20261017.26`：m3 SmartKnob 状态机、m4 两侧边界伺服、m1/m2 专用测速、模式 10/10、m4 回边 10/10、看门狗/构建/烧录恢复与未测项 |
+| `docs/haptic-m1-m4-followup-2026-10-18.md` | `fw=20261017.27`：m1 `df=0.16`、m4 单向边界伺服与 5° 静默捕获带、构建/烧录状态及最终矩阵待重新上电确认 |
 | `docs/ui-speed-current-estop-2026-10-18.md` | `.25` 上位机速度滑块、三相电流显示、急停时延、构建/上传/COM26 证据与未测边界 |
 | `docs/haptic-modes-2026-10-17.md` | `fw=20261017.23` m0–m4 实现、PWM 采样边沿修复、1800 LSB 过流阈值、开环软启动/20% 上限、`rot ±360` 安全位置/低抖动档、高频原始角遥测、自动矩阵与人工体感边界 |
 | `docs/spin-acceptance-2026-10-17.md` | `fw=20261017.5` SPIN 24 档与位置闭环 force8 验收：24/24 PASS、失联保护、编码器状态位 100 ms 判据、串口烧录顺序与 nRST 结论 |

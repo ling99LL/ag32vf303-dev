@@ -40,20 +40,25 @@ def main():
 
         p.position_between_large(22, 19, 41)
         p.enter(3)
-        p.record('m3 snap +20', 'stable', p.capture(2.5),
+        p.record('m3 snap +20', 'stable', p.capture(4.0),
                  expect_pos=1, expect_tgt=30, expect_ang=30.0, ang_tol=2.5)
+
+        p.position_between_large(-22, -41, -19)
+        p.enter(3)
+        p.record('m3 snap -20', 'stable', p.capture(4.0),
+                 expect_pos=-1, expect_tgt=-30, expect_ang=-30.0, ang_tol=2.5)
 
         p.position_between_large(40, 32, 44)
         p.enter(3)
-        p.record('m3 inside +40', 'stable', p.capture(2.5), expect_pos=1, expect_tgt=30)
+        p.record('m3 inside +40', 'stable', p.capture(4.0), expect_pos=1, expect_tgt=30)
 
-        p.position_between_large(0, -2, 2)
+        p.position_between_large(0, -15, 15)
         p.enter(4)
         p.record('m4 center free', 'idle', p.capture(2.0))
 
         p.position_between_large(60, 46, 80)
         p.enter(4)
-        p.record('m4 soft wall', 'softwall', p.capture(3.0), expect_tgt=45)
+        p.record('m4 bounded pull', 'wall', p.capture(4.0), expect_tgt=45)
     finally:
         summary = p.finish()
         p.close()

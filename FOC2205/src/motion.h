@@ -107,6 +107,7 @@ int  motion_haptic_timeout_pending(void);
 void motion_haptic_set_center(void);
 void motion_haptic_config_changed(void);
 int32_t motion_haptic_limit_q12(void);
+int32_t motion_haptic_vel_rawps(void);
 float   motion_haptic_angle_rad(void);
 float   motion_haptic_target_rad(void);
 int32_t motion_haptic_position(void);

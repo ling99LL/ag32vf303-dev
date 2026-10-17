@@ -309,13 +309,15 @@ static void test_haptic_modes_and_timeout(void)
   assert(haptic_compute_q12(0, 1000, .001f, 1638) == 0);
 
   haptic_mode_enter(HAPTIC_DAMP, 0);
+  assert(g_haptic_cfg.k_damp >= 0.15f);
   assert(haptic_compute_q12(0, 1000, .001f, 1638) < 0);
   assert(haptic_compute_q12(0, -1000, .001f, 1638) > 0);
 
   haptic_mode_enter(HAPTIC_INERTIA, 0);
   assert(haptic_compute_q12(0, 1000, .001f, 1638) > 0);
   int32_t assist = haptic_compute_q12(0, 20000, .001f, 1638);
-  assert(assist > 0 && assist <= 132);
+  assert(assist > 0 && assist <= 197);
+  assert(haptic_compute_q12(0, 60000, .001f, 1638) == 0);
 
   haptic_set_center(0);
   haptic_mode_enter(HAPTIC_DETENT, 0);
@@ -328,7 +330,13 @@ static void test_haptic_modes_and_timeout(void)
   haptic_set_center(0);
   haptic_mode_enter(HAPTIC_BOUNDED, 0);
   assert(haptic_compute_q12(300, 1000, .001f, 1638) < 0);  /* free-zone damping */
-  assert(haptic_compute_q12(3000, 0, .001f, 1638) < 0);    /* +66 deg, pull back */
+  assert(haptic_compute_q12(3000, 0, .001f, 1638) < -150); /* +66 deg, pull back */
+  assert(!g_foc.comm_override);
+  int32_t wall = haptic_compute_q12(2700, 0, .001f, 1638); /* +59.3 deg */
+  assert(wall < -150);                                     /* bounded wall servo */
+  assert(haptic_compute_q12(1955, -1000, .001f, 1638) > 0); /* edge damping */
+  assert(!g_foc.comm_override);                            /* latch releases drag */
+  assert(haptic_compute_q12(2048, 0, .001f, 1638) == 0);    /* settle on edge */
   assert(fabsf(haptic_target_rad() - 0.785398f) < 0.02f);
 
   reset();

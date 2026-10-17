@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FOC2205 m4 bounded-wall parked-at-boundary census."""
+"""FOC2205 m4 bounded-wall pull-back census."""
 import argparse
 import sys
 from pathlib import Path
@@ -22,8 +22,13 @@ def main():
         for delta in (46, 48, 50, 52, 54):
             p.position_between_large(delta + 8, 46, 80)
             p.enter(4)
-            p.record(f'm4 soft wall +{delta}', 'softwall', p.capture(3.0),
-                     expect_tgt=45.0)
+            p.record(f'm4 pull-back +{delta}', 'wall', p.capture(4.0),
+                     expect_tgt=45.0, expect_ang=45.0)
+        for delta in (-46, -48, -50, -52, -54):
+            p.position_between_large(delta - 8, -80, -46)
+            p.enter(4)
+            p.record(f'm4 pull-back {delta}', 'wall', p.capture(4.0),
+                     expect_tgt=-45.0, expect_ang=-45.0)
     finally:
         summary = p.finish()
         p.close()

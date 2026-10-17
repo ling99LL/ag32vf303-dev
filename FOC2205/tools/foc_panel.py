@@ -24,7 +24,7 @@ SPIN_VEL_KI_DEFAULT = 0.050
 SPIN_VEL_FF_DEFAULT = 0.000
 SPIN_VEL_FR_DEFAULT = 0.000
 HAPTIC_PARAMS = [
-    ('df', 'm1 阻尼 df', 0.0, 1.0, 0.01, 0.10, '{:.2f}', 'df {:.2f}'),
+    ('df', 'm1 阻尼 df', 0.0, 1.0, 0.01, 0.16, '{:.2f}', 'df {:.2f}'),
     ('fi', 'm2 惯性 fi', 0.0, 0.3, 0.005, 0.05, '{:.3f}', 'fi {:.3f}'),
     ('dw', 'm3 挡宽 dw(deg)', 5.0, 90.0, 1.0, 30.0, '{:.0f}', 'dw {:.0f}'),
     ('ds', 'm3 挡力 ds', 0.0, 6.0, 0.1, 2.5, '{:.1f}', 'ds {:.1f}'),
@@ -34,8 +34,8 @@ HAPTIC_PARAMS = [
     ('pn', 'm3 下限 pn', -16.0, 16.0, 1.0, 0.0, '{:.0f}', 'pn {:.0f}'),
     ('px', 'm3 上限 px', -16.0, 16.0, 1.0, -1.0, '{:.0f}', 'px {:.0f}'),
     ('br', 'm4 边界 br(deg)', 5.0, 170.0, 1.0, 45.0, '{:.0f}', 'br {:.0f}'),
-    ('kp', 'm4 回拉 kp', 0.0, 15.0, 0.1, 5.0, '{:.1f}', 'kp {:.1f}'),
-    ('kd', 'm4 阻尼 kd', 0.0, 2.0, 0.01, 0.30, '{:.2f}', 'kd {:.2f}'),
+    ('kp', 'm4 边界刚度 kp', 0.0, 15.0, 0.1, 5.0, '{:.1f}', 'kp {:.1f}'),
+    ('kd', 'm4 边界阻尼 kd', 0.0, 2.0, 0.01, 0.45, '{:.2f}', 'kd {:.2f}'),
     ('kf', 'm4 区轻阻尼 kf', 0.0, 0.5, 0.005, 0.02, '{:.3f}', 'kf {:.3f}'),
     ('vl', '力度上限 vl(%)', 5.0, 25.0, 1.0, 20.0, '{:.0f}', 'vl {:.0f}'),
 ]
@@ -353,7 +353,8 @@ class App:
         row.pack(fill='x', pady=(8, 4))
         ttk.Button(row, text='当前位置设中心', command=lambda: self._send('cd\n')).pack(side='left')
         ttk.Button(row, text='释放输出', command=lambda: self._send('s')).pack(side='left', padx=6)
-        ttk.Label(left, text='参数松开发送；m3/m4 共用中心。', foreground='#5a6474').pack(anchor='w')
+        ttk.Label(left, text='参数松开发送；m3 为 SmartKnob 吸附状态机，m4 为真实回边软墙。',
+                  foreground='#5a6474').pack(anchor='w')
 
         params_box = ttk.Frame(left)
         params_box.pack(fill='both', expand=True, pady=(4, 0))

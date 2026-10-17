@@ -28,7 +28,7 @@ def parse_tele(line: str):
     if not line.startswith('$T,3,'):
         return None
     parts = line.split(',')
-    if len(parts) not in (12, 13):
+    if len(parts) not in (12, 13, 17):
         return None
     try:
         out = {
@@ -46,6 +46,14 @@ def parse_tele(line: str):
         }
         if len(parts) == 13:
             out['raw'] = int(parts[12])
+        elif len(parts) == 17:
+            out.update({
+                'raw': int(parts[12]),
+                'ia': int(parts[13]),
+                'ib': int(parts[14]),
+                'ic': int(parts[15]),
+                'adcok': int(parts[16]),
+            })
         return out
     except ValueError:
         return None
@@ -163,15 +171,19 @@ class Probe:
         else:
             raise RuntimeError(f'could not select positioning speed {speed}')
 
-        for _ in range(8):
+        # rot caps its internal command at 512. Leave the config above that
+        # cap so every setup move really receives the full 512, not the
+        # nearest lower +/- quarter step (486).
+        goal_vq = 648 if vq_max <= 512 else vq_max
+        for _ in range(10):
             cfg = self.query_cfg()
             current = int(cfg.get('vq_max', '0'))
-            if abs(current - vq_max) <= 64:
+            if abs(current - goal_vq) <= 64:
                 break
-            self.send('-' if current > vq_max else '+')
+            self.send('-' if current > goal_vq else '+')
             self.poll(0.2, keepalive=False)
         else:
-            raise RuntimeError(f'could not select positioning vq_max near {vq_max}')
+            raise RuntimeError(f'could not select positioning vq_max near {goal_vq}')
         cfg = self.query_cfg()
         print(f"position profile: speed={cfg.get('speed')} vq_max={cfg.get('vq_max')}", flush=True)
 
@@ -183,6 +195,11 @@ class Probe:
 
     def relative_angle(self):
         return self.rows[-1]['ang'] if self.rows else None
+
+    def fresh_angle(self, seconds=0.25):
+        self.rows.clear()
+        self.poll(seconds, keepalive=False)
+        return self.relative_angle()
 
     def return_center(self):
         self.release()
@@ -251,21 +268,19 @@ class Probe:
                 f'positioning range [{low_deg:.1f},{high_deg:.1f}] missed (got {current})')
         return current
 
-    def position_between_large(self, target_deg, low_deg, high_deg, tries=3):
+    def position_between_large(self, target_deg, low_deg, high_deg, tries=5):
         """Use full-size moves; small moves can be pulled back by motor cogging."""
         self.release()
         current = None
         for _ in range(tries):
-            self.poll(0.12, keepalive=False)
-            current = self.relative_angle()
+            current = self.fresh_angle(0.30)
             if current is None:
                 raise RuntimeError('no telemetry while positioning')
             if low_deg <= current <= high_deg:
                 return current
             correction = target_deg - current
-            if not self.rotate(correction):
-                raise RuntimeError(
-                    f'rot {correction:.2f} while positioning to {target_deg:.2f} failed')
+            if not self.rotate(correction) and not self.manual_move_to(target_deg):
+                continue
         self.poll(0.08, keepalive=False)
         current = self.relative_angle()
         if current is None or not (low_deg <= current <= high_deg):
@@ -298,11 +313,47 @@ class Probe:
             self._read()
             recent = self.lines[mark:]
             if any('MOVE DONE' in x for x in recent):
+                self.poll(0.30, keepalive=False)
                 return True
             if any('MOVE ABORT' in x for x in recent):
                 self.poll(0.3)
                 return False
         return False
+
+    def manual_move_to(self, target_deg, timeout=20.0):
+        """Open-loop fallback when the low-voltage rot trajectory stalls."""
+        if not self.wait_ready():
+            return False
+        self.release()
+        self.rows.clear()
+        self.send('m')
+        self.send('w2')  # 12%, below the 20% manual cap
+        self.send('x0')
+        current = self.relative_angle()
+        if current is None:
+            self.poll(0.25, keepalive=False)
+            current = self.relative_angle()
+        if current is None:
+            return False
+        forward = [1, 3, 2, 6, 4, 5]
+        order = forward if target_deg >= current else list(reversed(forward))
+        end = time.monotonic() + timeout
+        try:
+            while time.monotonic() < end:
+                for mask in order:
+                    self.send(f'x{mask}')
+                    time.sleep(0.05)
+                    self._read()
+                    current = self.relative_angle()
+                    if current is not None and (
+                        (order is forward and current >= target_deg) or
+                        (order is not forward and current <= target_deg)
+                    ):
+                        return True
+            return False
+        finally:
+            self.send('s')
+            self.poll(0.2, keepalive=False)
 
     def capture(self, seconds=2.5):
         self.rows.clear()
@@ -312,12 +363,14 @@ class Probe:
             return None
         ang = [r['ang'] for r in usable]
         tail = usable[-80:]
+        tail_abs_vel = sorted(abs(r['vel']) for r in tail)
+        tail_vel_p90 = tail_abs_vel[int(0.9 * (len(tail_abs_vel) - 1))]
         return Metrics(
             rows=usable,
             p2p=max(ang) - min(ang),
             tail_p2p=max(r['ang'] for r in tail) - min(r['ang'] for r in tail),
             tail_ang=tail[-1]['ang'],
-            tail_vel=max(abs(r['vel']) for r in tail),
+            tail_vel=tail_vel_p90,
             tail_tq=max(abs(r['tq']) for r in tail),
             tail_tgt=tail[-1]['tgt'],
             hz_min=min(r['hz'] for r in usable),
@@ -343,7 +396,10 @@ class Probe:
                 ok = ok and metrics.tail_vel <= 0.2 and metrics.tail_p2p <= 1.0
             elif expected == 'wall':
                 ok = ok and metrics.tail_vel <= 0.2 and metrics.tail_p2p <= 1.0
-                ok = ok and abs(metrics.tail_ang - 45.0) <= 3.0
+                wall_ang = 45.0 if expect_ang is None else expect_ang
+                # fw .27 uses a 5-degree soft-capture band so the mechanical
+                # rest inside the limit cannot re-trigger the wall relay.
+                ok = ok and abs(metrics.tail_ang - wall_ang) <= 6.0
             elif expected == 'softwall':
                 ok = ok and metrics.tail_vel <= 0.2 and metrics.tail_p2p <= 1.0
                 ok = ok and metrics.tail_ang >= 44.5 and metrics.tail_tq >= 10

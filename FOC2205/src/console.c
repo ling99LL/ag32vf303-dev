@@ -62,7 +62,7 @@ static void console_help(void)
   printf("g / n : release all outputs (same as s)\n");
   printf("?     : one-line status frame (for tools/foc_panel.py)\n");
   printf("m / xN / wN : manual phase force: on / mask 0-7 / strength 5/10/15/20pct\n");
-  printf("m0-m4 : free / damping / inertia / detent / bounded force modes\n");
+  printf("m0-m4 : free / damping / inertia / SmartKnob detent / hard soft-wall modes\n");
   printf("df fi kp kd kf vl dw ds es sp sb pn px br : haptic parameters\n");
   printf("cd : set haptic center at current angle; rot <deg> : relative move (safe 0.05 rev/s, vq<=512)\n");
   printf("tel <0/10/20/50/100> : compact $T telemetry (0=off)\n");
@@ -187,7 +187,7 @@ static void print_status_frame(void)
   foc_oc_get(&oc);
   printf("#FOC,proto=3,ang=%d,deg=%u.%u,crc=%u,ia=%d,ib=%d,ic=%d,mode=%d,mask=%u,pct=%d,"
          "drv=0x%02x,vq=%ld,iacc=%ld,err=%ld,vel=%ld,st=%d,hyb=%d,slip=%ld,"
-         "diag=1,fw=20261017.25,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
+         "diag=1,fw=20261017.27,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
          "drvok=%d,encok=%d,mg=%u,adcok=%d,cal=%d,adce=%u,brk=%d,out=%d,"
          "cl=%d,open=%d,vsp=%ld,vfb=%ld,verr=%ld,vkp=%d,vki=%d,vff=%d,vfr=%d,"
          "id=%d,iq=%d,iref=%ld,ipa=%d,ipb=%d,ipc=%d,ocn=%u,ocmx=%u,ocg=%u,"
@@ -835,7 +835,9 @@ static void telemetry_emit(void)
   int16_t ia = 0, ib = 0, ic = 0;
   foc_last_currents(&ia, &ib, &ic);
   long ang = (long)(motion_haptic_angle_rad() * 18000.0f / 3.14159265359f);
-  long vel = (long)((int64_t)motion_vel_rawps() * 6283 / 16384);
+  int32_t raw_vel = motion_haptic_active()
+                  ? motion_haptic_vel_rawps() : motion_vel_rawps();
+  long vel = (long)((int64_t)raw_vel * 6283 / 16384);
   long tq = (long)motion_cmd_q12();
   long tgt = (long)(motion_haptic_target_rad() * 18000.0f / 3.14159265359f);
   long pos = hm == 3 ? (long)motion_haptic_position() : 0;

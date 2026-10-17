@@ -24,6 +24,7 @@
 #define MOTION_POS_ACCEL_RPS2 0.75f
 #define SPIN_VEL_LPF_TAU_S 0.015f
 #define SPIN_VQ_RAMP_FULL_SCALE_PER_S 5.0f
+#define HAPTIC_VEL_WINDOW_MS 10u
 
 motion_cfg_t g_motion_cfg = {
   .kp=2.0f, .kd=0.02f, .kd_hold=0.0f, .ki=1.5f,
@@ -80,6 +81,9 @@ static int s_haptic_timedout;
 static int64_t s_haptic_pos;
 static uint16_t s_haptic_raw;
 static int s_haptic_filter_valid;
+static int64_t s_haptic_vel_pos;
+static uint32_t s_haptic_vel_count;
+static int32_t s_haptic_vel;
 
 static void finish(void);
 
@@ -107,6 +111,20 @@ static void haptic_position_filter_step(void)
   if (d > 4 || d < -4) d = 0;
   s_haptic_pos += d;
   s_haptic_raw = raw;
+
+  uint32_t window = (s_hz * HAPTIC_VEL_WINDOW_MS + 999u) / 1000u;
+  if (window < 16u) window = 16u;
+  if (++s_haptic_vel_count >= window)
+  {
+    int64_t dp = s_haptic_pos - s_haptic_vel_pos;
+    s_haptic_vel_pos = s_haptic_pos;
+    s_haptic_vel_count = 0;
+    int32_t max_dp = 3 * RAW_TURN * (int32_t)window / (int32_t)s_hz + 4;
+    if (dp > max_dp) dp = max_dp;
+    if (dp < -max_dp) dp = -max_dp;
+    int32_t measured = (int32_t)(dp * s_hz / window);
+    s_haptic_vel += (measured - s_haptic_vel) / 2;
+  }
 }
 static float shortest(float a)
 {
@@ -228,6 +246,9 @@ void motion_init(void)
   s_haptic_last_host_tick = 0;
   s_haptic_timedout = 0;
   s_haptic_filter_valid = 0;
+  s_haptic_vel_pos = 0;
+  s_haptic_vel_count = 0;
+  s_haptic_vel = 0;
   haptic_init();
   g_motion_cfg.vq_max = motion_vq_limit();
 }
@@ -542,6 +563,9 @@ int motion_haptic_start(int mode)
   s_haptic_pos = s_pos;
   s_haptic_raw = foc_last_angle() & 0x3fffu;
   s_haptic_filter_valid = 1;
+  s_haptic_vel_pos = s_haptic_pos;
+  s_haptic_vel_count = 0;
+  s_haptic_vel = 0;
   haptic_mode_enter(mode, s_haptic_pos);
   s_haptic_last_host_tick = s_ticks;
   s_haptic_timedout = 0;
@@ -601,6 +625,11 @@ int32_t motion_haptic_limit_q12(void)
   int32_t hl = haptic_limit_q12();
   int32_t ml = motion_vq_limit();
   return hl < ml ? hl : ml;
+}
+
+int32_t motion_haptic_vel_rawps(void)
+{
+  return g_haptic_cfg.mode <= HAPTIC_INERTIA ? s_haptic_vel : s_vel;
 }
 
 float motion_haptic_angle_rad(void)
@@ -882,6 +911,10 @@ void motion_step_isr(void)
   if (s_mode == HAPTIC)
   {
     haptic_position_filter_step();
+    // The haptic observer rejects isolated MT6701 jumps. Keep the shared
+    // continuous position on the same timeline so leaving a haptic mode does
+    // not expose a stale/diverged angle to telemetry or the next rot move.
+    s_pos = s_haptic_pos;
     uint32_t host_limit = HAPTIC_TIMEOUT_MS * s_hz / 1000u;
     if ((uint32_t)(s_ticks - s_haptic_last_host_tick) > host_limit)
     {
@@ -890,7 +923,8 @@ void motion_step_isr(void)
       s_state = MOTION_IDLE;
       return;
     }
-    s_vq = haptic_compute_q12(s_haptic_pos, s_vel, 1.0f / (float)s_hz,
+    s_vq = haptic_compute_q12(s_haptic_pos, motion_haptic_vel_rawps(),
+                              1.0f / (float)s_hz,
                               motion_haptic_limit_q12());
     g_foc.torque_q = s_vq;
     return;
