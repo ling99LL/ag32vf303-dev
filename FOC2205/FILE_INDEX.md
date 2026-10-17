@@ -1,6 +1,6 @@
 # FOC2205 文件导航
 
-更新：2026-10-17。硬件和功能入口见 README；重构与复查证据见 `docs/refactor-audit-2026-10-16.md`、`docs/code-audit-2026-10-16.md`，最新通电实测见 `docs/powered-debug-2026-10-16.md`。历史调参快照在 `experiments/notes/`，不用于判断当前功能。
+更新：2026-10-17。硬件和功能入口见 README；重构与复查证据见 `docs/refactor-audit-2026-10-16.md`、`docs/code-audit-2026-10-16.md`，最新通电实测见 `docs/smoothness-2026-10-17.md` 与 `docs/powered-debug-2026-10-17.md`（历史：`docs/powered-debug-2026-10-16.md`）。历史调参快照在 `experiments/notes/`，不用于判断当前功能。
 
 | 文件或目录 | 用途 |
 |---|---|
@@ -41,6 +41,7 @@
 | `experiments/tests/nfault/` | nFAULT/硬件断路验证：DRV 自故障注入、halt 冻结确认、全流程脚本与说明 |
 | `experiments/tests/calibrate.py` | 校准运行器：`s`→`a`→轮询 `calst=7/9`，兼作校准链路看门狗喂狗 |
 | `experiments/tests/accept_closedloop.py` | 闭环验收运行器：连发 N 个单圈位置伺服，逐圈报告位移/误差/调制/反向步进/glitch |
+| `experiments/tests/current_loop/` | 电流环/过流取证：`accept_current_loop.py`（A/B 段）、`snap_walk2.py`+`walk_one.py`（坏窗口定位）、`set_preset.py`/`prep_ED.py`（配置对齐）、`run_window_move.py`（单步 E/D 取证）、`final_state.py`（收尾）；平滑扫描：`smoothness_sweep.py`（速度×力度/调参/候选/验收矩阵，`--blocks matrix,slow,ref,repeat,gains,tune,cand,candmat,candrep,kiscan,slow2,fast,posgain,accept5,accept8,force8,slow8,soak` 选择）、`hyb_rate_test.py`（hybrid-ISR 速率对照）、`session_close.py`（候选确认收尾）、`smooth_analyze.py`（日志离析） |
 | `experiments/tests/force_sweep/` | 力度档扫描：探针精写 `vq_max` 后单圈运行、跳闸自动 `z` 恢复重试；`recover.py`/`jog.py`/`restore_cfg.py` 辅助 |
 | `experiments/probes/`、`archive_manifest.csv` | 40 个历史探测脚本与 1 个 APB_CLKEN 探测输出原样归档 + 路径/大小/SHA256 清单；相对路径不作运行保证 |
 | `experiments/notes/` | 历史调参叙述、规格书文本提取、旧 README；不代表当前版本 |
@@ -49,11 +50,13 @@
 | `.pio/` | MCU 构建数据库、ELF/BIN/HEX 及上次 logic 备份，不入库 |
 | `CONTEXT.md` | 领域术语 |
 | `docs/adr/` | 模块交付和宿主接口决策；目标不等同于已实现 |
-| `docs/basic-motion-acceptance.md` | 基础运动验收矩阵；六个开环组合已于 2026-10-16 各通过一次，重复性与闭环待做 |
+| `docs/basic-motion-acceptance.md` | 基础运动验收矩阵；六个开环组合已于 2026-10-16 各通过一次；闭环速度×力度平滑扫描与候选配置见 `docs/smoothness-2026-10-17.md` |
 | `docs/refactor-audit-2026-10-16.md` | 第一阶段问题清单、构建和回归结果 |
 | `docs/code-audit-2026-10-16.md` | 第二轮代码复查：烧录复测被 SWD 无法 halt 阻塞、剩余风险清单 |
 | `docs/unpowered-debug-2026-10-16.md` | 外设时钟修正、烧录、未供电诊断与上位机实测记录 |
 | `docs/powered-debug-2026-10-16.md` | 通电调试：SPI 超时修复、总线桥验证、停止 BRK 与起步反抽的根因和修复、六组合五圈验收、nFAULT 硬件断路通道验证、闭环首轮与过流跳闸、力度档扫描 5–25% 与起步跳闸按起始电角度归因 |
+| `docs/powered-debug-2026-10-17.md` | 过流判别（连续 3 拍+峰值/快照）与电流环首轮：坏窗口 E/D 决定性实验、真实 n=3 跳闸样本、定位/取证脚本与日志清单 |
+| `docs/smoothness-2026-10-17.md` | 闭环平滑扫描（hyb=0）：速度×力度矩阵与重复性、hybrid 致 ISR 20 kHz→~12 kHz 定性、运动 kp=8 + kd60 + filt256 推荐配置与开机序列、kp=2/kp=8 五连圈验收、力度上限表、24 圈 soak、30 rpm 起步失败模式 |
 | `docs/*接线设计.md`、`*引脚*.md`、`*网表.md` | 硬件设计资料；当前引脚以 VE 为准 |
 | `docs/*规格书*.PDF`、`docs/drv8316_text.txt`、`电机参数.jpg/md` | 官方规格书（含 DRV8316C 文本提取）和电机参数 |
 | `docs/FOC2205_审查结果交付文档.md` | 先前审查整改历史 |
