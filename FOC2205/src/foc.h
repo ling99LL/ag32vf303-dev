@@ -2,7 +2,7 @@
 //
 // The knob's feel (手感) is tuned through the params below; the electrical loop
 // runs in the GPTIMER0 update ISR: sample currents (quasi-simultaneous) and
-// angle (SSI) at the PWM valley, then update the three CCRs.
+// angle (SSI) at the low-side-conduction PWM edge, then update the three CCRs.
 #ifndef FOC_H
 #define FOC_H
 

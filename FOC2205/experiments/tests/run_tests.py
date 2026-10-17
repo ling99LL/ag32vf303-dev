@@ -9,7 +9,7 @@ HERE = Path(__file__).resolve().parent
 GCC = shutil.which('gcc') or r'C:\MinGW\bin\gcc.exe'
 BUILD = HERE / 'build'
 BUILD.mkdir(exist_ok=True)
-sources = ['motion.c', 'foc.c', 'mt6701.c', 'console.c', 'control.c', 'calibration.c']
+sources = ['motion.c', 'haptic.c', 'foc.c', 'mt6701.c', 'console.c', 'control.c', 'calibration.c']
 subprocess.run([GCC, '-std=c99', '-O2', '-Wall', '-Wextra', '-Werror',
                 '-DFOC_HOST_TEST', '-DFOC_CPLD_BRINGUP=1',
                 '-include', str(HERE/'stubs/test_platform.h'),
@@ -18,6 +18,9 @@ subprocess.run([GCC, '-std=c99', '-O2', '-Wall', '-Wextra', '-Werror',
                 str(HERE/'control_regression.c'), '-lm', '-o', str(BUILD/'control.exe')], check=True)
 subprocess.run([str(BUILD/'control.exe')], check=True)
 subprocess.run([sys.executable, str(HERE/'test_panel_protocol.py')], check=True)
-for p in (ROOT/'tools').glob('*.py'):
+for p in (list((ROOT/'tools').glob('*.py')) +
+          list(HERE.glob('*.py')) +
+          list((HERE/'haptic').glob('*.py')) +
+          list((HERE/'spin').glob('*.py'))):
     compile(p.read_text(encoding='utf-8-sig'), str(p), 'exec')
 print('PASS active Python tools syntax')

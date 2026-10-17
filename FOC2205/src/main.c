@@ -283,6 +283,7 @@ startup_fault:
     up_ms = (uint32_t)((UTIL_GetMcycle() - runtime_start) / cycles_per_ms);
 
     console_poll(up_ms);
+    console_telemetry_poll(up_ms);
 
 #if MOTION_AUTORUN
     if (console_autorun_cancelled()) autorun_fired = 1;
@@ -306,6 +307,9 @@ startup_fault:
     }
     if (motion_spin_timed_out()) {
       printf("SPIN host watchdog: no command for 1 s -- ramping down\n");
+    }
+    if (motion_haptic_timed_out()) {
+      printf("haptic host watchdog: no command for 1 s -- output released\n");
     }
 
     if (FOC_CPLD_BRINGUP && (int32_t)(up_ms - drv_next_ms) >= 0) { // 每秒刷一次故障面
@@ -338,7 +342,7 @@ startup_fault:
       last_state = motion_state();
     }
 
-    if ((uint32_t)(up_ms - last_print_ms) >= 250u) {
+    if (!console_telemetry_active() && (uint32_t)(up_ms - last_print_ms) >= 250u) {
       last_print_ms = up_ms;
       uint32_t now = s_isr_count;
       printf("isr=%u ang=%d crc=%u j=%u/%u | st=%d err=%ld vm=%ld vel=%ld vq=%ld i=%ld"

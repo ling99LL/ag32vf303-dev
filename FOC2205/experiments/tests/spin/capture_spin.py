@@ -33,6 +33,11 @@ def main():
     ap.add_argument('--rate', type=float, default=20.0)
     ap.add_argument('--q-steps', type=int, default=0,
                     help='send q this many times after start (angle-filter gear)')
+    ap.add_argument('--mode', choices=('closed', 'open'), default='closed')
+    ap.add_argument('--vp', type=float)
+    ap.add_argument('--vi', type=float)
+    ap.add_argument('--vff', type=float)
+    ap.add_argument('--vfr', type=float)
     ap.add_argument('--tag', default='spin-capture')
     args = ap.parse_args()
     rps = SPEED_RPS[args.speed]
@@ -77,6 +82,11 @@ def main():
                 read()
 
         send('s'); poll(.8, .2)
+        send('#1' if args.mode == 'open' else '#0'); poll(.15, .1)
+        for name, value in (('vp', args.vp), ('vi', args.vi),
+                            ('vff', args.vff), ('vfr', args.vfr)):
+            if value is not None:
+                send('%s %.6f\n' % (name, value)); poll(.15, .1)
         send(args.speed); poll(.15, .1)
         send(FORCE_GEAR[args.force]); poll(.15, .1)
         send('p'); poll(1.0, .1)       # let the 1.33 s ramp finish

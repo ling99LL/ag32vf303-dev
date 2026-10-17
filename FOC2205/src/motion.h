@@ -34,6 +34,12 @@ typedef struct
   float    hyb_slip_deg;
   float    hyb_corr_pct;
   float    hyb_corr_floor;
+  // Closed-loop SPIN velocity PI. Output and errors use mechanical raw/s;
+  // the PI output is Q12 modulation/current reference, like torque_q.
+  float    spin_vel_kp;
+  float    spin_vel_ki;
+  float    spin_vel_ff;
+  float    spin_vel_fric;
 } motion_cfg_t;
 
 extern motion_cfg_t g_motion_cfg;
@@ -49,8 +55,9 @@ int motion_recover(void);
 int  motion_openloop_start(float rev_per_s, int32_t vq_q12, uint32_t ms);
 int  motion_torque_hold(int32_t vq_q12, uint32_t ms);
 
-// Endless position ramp ("SPIN"). The host must poll at least once per second
-// or the ISR starts a bounded deceleration and releases the bridge.
+// Endless rotation ("SPIN"). Closed loop uses a velocity PI on the encoder;
+// open loop advances a fixed voltage vector. The host must poll at least once
+// per second or the ISR starts a bounded deceleration and releases the bridge.
 #ifndef SPIN_POWER_PCT_MAX
 #define SPIN_POWER_PCT_MAX 80
 #endif
@@ -58,7 +65,7 @@ int  motion_torque_hold(int32_t vq_q12, uint32_t ms);
 #define SPIN_POWER_PCT_DEFAULT 20
 #endif
 #ifndef SPIN_OPENLOOP_POWER_PCT_MAX
-#define SPIN_OPENLOOP_POWER_PCT_MAX 40
+#define SPIN_OPENLOOP_POWER_PCT_MAX 20
 #endif
 int  motion_spin_start(int direction, float rev_per_s, int power_pct);
 int  motion_spin_start_mode(int direction, float rev_per_s, int power_pct,
@@ -67,11 +74,20 @@ void motion_spin_stop(void);
 void motion_spin_keepalive(void);
 void motion_spin_set_speed(float rev_per_s);
 void motion_spin_set_power(int power_pct);
+int  motion_spin_power_cap(void);
 int  motion_spin_active(void);
 int  motion_spin_stopping(void);
 int32_t motion_spin_pct(void);
 float   motion_spin_rps(void);
 int  motion_spin_timed_out(void);
+void motion_spin_set_velocity_gains(float kp, float ki, float ff, float friction);
+float motion_spin_vel_kp(void);
+float motion_spin_vel_ki(void);
+float motion_spin_vel_ff(void);
+float motion_spin_vel_friction(void);
+int32_t motion_spin_target_vel_rawps(void);
+int32_t motion_spin_feedback_rawps(void);
+int32_t motion_spin_vel_error_rawps(void);
 
 void motion_manual_start(uint8_t mask, int32_t pct);
 void motion_manual_set(uint8_t mask, int32_t pct);
@@ -80,6 +96,21 @@ int  motion_manual_active(void);
 uint8_t motion_manual_mask(void);
 int32_t  motion_manual_pct(void);
 int  motion_manual_timed_out(void);
+
+// Native high-resolution force-feedback modes (m0..m4).
+int  motion_haptic_start(int mode);
+void motion_haptic_keepalive(void);
+int  motion_haptic_active(void);
+int  motion_haptic_mode(void);
+int  motion_haptic_timed_out(void);
+int  motion_haptic_timeout_pending(void);
+void motion_haptic_set_center(void);
+void motion_haptic_config_changed(void);
+int32_t motion_haptic_limit_q12(void);
+float   motion_haptic_angle_rad(void);
+float   motion_haptic_target_rad(void);
+int32_t motion_haptic_position(void);
+float   motion_haptic_subpos(void);
 
 void motion_hybrid_enable(int on);
 int  motion_hybrid_enabled(void);

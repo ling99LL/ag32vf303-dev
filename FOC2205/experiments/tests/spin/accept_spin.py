@@ -20,7 +20,7 @@ GLITCH_STEP = 1200
 FORCE_GEAR = {10: 'W1', 20: 'W2', 30: 'W3', 40: 'W4',
               50: 'W5', 60: 'W6', 70: 'W7', 80: 'W8'}
 SPEED_RPS = {'V1': 0.05, 'V2': 0.10, 'V3': 0.25, 'V4': 1.00}
-OPENLOOP_POWER_MAX = 40
+OPENLOOP_POWER_MAX = 20
 
 
 def step_raw(a, b):
@@ -148,8 +148,9 @@ def require_ready():
     bad = {k: frame.get(k) for k in required if frame.get(k) != '1'}
     if bad or frame.get('st') != '0' or frame.get('out') != '0' or frame.get('brk') != '0':
         raise RuntimeError('board not ready: %s' % json.dumps(frame, sort_keys=True))
-    if frame.get('fw') != '20261017.10':
-        raise RuntimeError('unexpected firmware: %s' % frame.get('fw'))
+    if frame.get('proto') != '3':
+        raise RuntimeError('unexpected protocol/firmware: %s / %s'
+                           % (frame.get('proto'), frame.get('fw')))
     say('READY fw=%s hz=%s calst=%s calok=%s aligned=%s'
         % (frame.get('fw'), frame.get('hz'), frame.get('calst'),
            frame.get('calok'), frame.get('aligned')))
@@ -188,16 +189,19 @@ def stop_and_wait(timeout=5.0):
 
 def run_spin(force, speed_gear, direction, index):
     rps = SPEED_RPS[speed_gear]
+    effective_force = force
+    if args.mode == 'open':
+        effective_force = min(force, OPENLOOP_POWER_MAX)
     direction_name = 'forward' if direction > 0 else 'reverse'
-    tag = '%02d-%s-W%d-%s' % (index, speed_gear, force, direction_name)
+    tag = '%02d-%s-W%d-%s' % (index, speed_gear, effective_force, direction_name)
     say('START %s force=%d%% speed=%s %.2f rev/s direction=%s'
-        % (tag, force, speed_gear, rps, direction_name))
+        % (tag, effective_force, speed_gear, rps, direction_name))
 
     send('#1' if args.mode == 'open' else '#0')
     poll(.15)
     send(speed_gear)
     poll(.15)
-    send(FORCE_GEAR[force])
+    send(FORCE_GEAR[effective_force])
     poll(.15)
     pre = last()
     if pre.get('st') != '0' or pre.get('out') != '0':
@@ -219,12 +223,11 @@ def run_spin(force, speed_gear, direction, index):
         if cur.get('st') != '1' or cur.get('out') != '1':
             raise RuntimeError('%s: output released unexpectedly: %s'
                                % (tag, json.dumps(cur)))
-        if int(cur.get('pct', -1)) != force:
+        if int(cur.get('pct', -1)) != effective_force:
             raise RuntimeError('%s: force cap mismatch pct=%s' % (tag, cur.get('pct')))
-        if cur.get('cl') != '1':
-            if args.mode == 'closed':
-                raise RuntimeError('%s: current loop not active: cl=%s'
-                                   % (tag, cur.get('cl')))
+        if args.mode == 'open' and cur.get('cl') != '0':
+            raise RuntimeError('%s: open-loop requires current loop OFF: cl=%s'
+                               % (tag, cur.get('cl')))
         if int(cur.get('open', 0)) != (1 if args.mode == 'open' else 0):
             raise RuntimeError('%s: mode mismatch open=%s' % (tag, cur.get('open')))
         run_frames.append((time.monotonic(), dict(cur)))
@@ -234,7 +237,7 @@ def run_spin(force, speed_gear, direction, index):
     oc = read_oc()
     post = query(.25)
 
-    rec = {'tag': tag, 'force': force, 'speed_gear': speed_gear,
+    rec = {'tag': tag, 'force': effective_force, 'speed_gear': speed_gear,
            'commanded_rps': rps, 'direction': direction_name,
            'started': True, 'stopped': stopped,
            'elapsed_s': round(time.monotonic() - t_start, 2),

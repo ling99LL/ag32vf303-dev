@@ -12,13 +12,34 @@ from tkinter import ttk, filedialog, messagebox
 
 import serial
 import serial.tools.list_ports
-from foc_protocol import PanelState, Status, STATE_NAMES
+from foc_protocol import PanelState, Status, Telemetry, STATE_NAMES, HAPTIC_MODE_NAMES
 
 POLL_MS = 100
+ENCODER_DISPLAY_DIRECTION = -1  # physical magnet/knob orientation on this board
 LOG_DIR = Path(__file__).resolve().parents[1] / 'experiments' / 'logs'
 SPIN_SPEEDS = ('0.05 圈/秒 (3 rpm)', '0.10 圈/秒 (6 rpm)',
                '0.25 圈/秒 (15 rpm)', '1.00 圈/秒 (60 rpm)')
-SPIN_OPENLOOP_POWER_MAX = 40
+SPIN_OPENLOOP_POWER_MAX = 20
+SPIN_VEL_KP_DEFAULT = 0.010
+SPIN_VEL_KI_DEFAULT = 0.050
+SPIN_VEL_FF_DEFAULT = 0.000
+SPIN_VEL_FR_DEFAULT = 0.000
+HAPTIC_PARAMS = [
+    ('df', 'm1 阻尼 df', 0.0, 1.0, 0.01, 0.10, '{:.2f}', 'df {:.2f}'),
+    ('fi', 'm2 惯性 fi', 0.0, 0.3, 0.005, 0.05, '{:.3f}', 'fi {:.3f}'),
+    ('dw', 'm3 挡宽 dw(deg)', 5.0, 90.0, 1.0, 30.0, '{:.0f}', 'dw {:.0f}'),
+    ('ds', 'm3 挡力 ds', 0.0, 6.0, 0.1, 2.5, '{:.1f}', 'ds {:.1f}'),
+    ('es', 'm3 限位 es', 0.0, 6.0, 0.1, 4.0, '{:.1f}', 'es {:.1f}'),
+    ('sp', 'm3 吸附 sp', 0.5, 1.5, 0.05, 0.6, '{:.2f}', 'sp {:.2f}'),
+    ('sb', 'm3 偏置 sb', 0.0, 0.49, 0.05, 0.0, '{:.2f}', 'sb {:.2f}'),
+    ('pn', 'm3 下限 pn', -16.0, 16.0, 1.0, 0.0, '{:.0f}', 'pn {:.0f}'),
+    ('px', 'm3 上限 px', -16.0, 16.0, 1.0, -1.0, '{:.0f}', 'px {:.0f}'),
+    ('br', 'm4 边界 br(deg)', 5.0, 170.0, 1.0, 45.0, '{:.0f}', 'br {:.0f}'),
+    ('kp', 'm4 回拉 kp', 0.0, 15.0, 0.1, 5.0, '{:.1f}', 'kp {:.1f}'),
+    ('kd', 'm4 阻尼 kd', 0.0, 2.0, 0.01, 0.30, '{:.2f}', 'kd {:.2f}'),
+    ('kf', 'm4 区轻阻尼 kf', 0.0, 0.5, 0.005, 0.02, '{:.3f}', 'kf {:.3f}'),
+    ('vl', '力度上限 vl(%)', 5.0, 25.0, 1.0, 20.0, '{:.0f}', 'vl {:.0f}'),
+]
 SPIN_SPEED_INFO = {text: (index + 1, rps) for index, (text, rps) in enumerate(zip(
     SPIN_SPEEDS, (0.05, 0.10, 0.25, 1.00)))}
 
@@ -31,13 +52,14 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title('FOC2205 调试台 — 设备诊断 / 角度 / 控制')
-        root.geometry('1120x960')
-        root.minsize(1040, 860)
+        root.geometry('1240x920')
+        root.minsize(1080, 820)
         self.ser = None
         self.reader_thread = None
         self.stop_evt = threading.Event()
         self.rxq = queue.Queue()
         self.model = PanelState()
+        self.model.encoder_direction = ENCODER_DISPLAY_DIRECTION
         self.history = deque(maxlen=5000)
         self.log_lines = deque(maxlen=2000)
         self.last_summary = None
@@ -46,6 +68,16 @@ class App:
         self.spin_stop_at = 0.0
         self.record_file = None
         self.record_writer = None
+        self.trace_file = None
+        self.trace_writer = None
+        self.haptic_history = deque(maxlen=12000)
+        self.haptic_latest = None
+        self.haptic_last_draw = 0.0
+        self.tel_requested = False
+        self.next_status_poll = 0.0
+        self.last_record_flush = 0.0
+        self.haptic_scales = {}
+        self.haptic_mode_buttons = []
         self._build_ui()
         self._clear_values()
         self._enable_controls()
@@ -70,6 +102,12 @@ class App:
         self.btn_conn.pack(side='left', padx=8)
         self.lbl_conn = ttk.Label(top, text='未连接')
         self.lbl_conn.pack(side='left')
+        ttk.Label(top, text='遥测率:').pack(side='left', padx=(20, 2))
+        self.tel_rate = tk.StringVar(value='50 Hz')
+        tel_cb = ttk.Combobox(top, textvariable=self.tel_rate, width=8, state='readonly',
+                              values=['关闭', '10 Hz', '20 Hz', '50 Hz', '100 Hz'])
+        tel_cb.pack(side='left')
+        tel_cb.bind('<<ComboboxSelected>>', self._telemetry_changed)
         self.btn_stop = tk.Button(top, text='释放输出  [Esc]', font=('Microsoft YaHei UI', 11, 'bold'),
                                   bg='#ba2836', fg='white', command=lambda: self._send('s'))
         self.btn_stop.pack(side='right')
@@ -77,7 +115,13 @@ class App:
                                bg='#e8edf4', fg='#28374d', padx=14, pady=10,
                                font=('Microsoft YaHei UI', 12, 'bold'))
         self.banner.pack(fill='x', padx=10)
-        body = ttk.Frame(self.root, padding=10)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill='both', expand=True, padx=10, pady=(0, 10))
+        status_tab = ttk.Frame(self.notebook)
+        haptic_tab = ttk.Frame(self.notebook)
+        self.notebook.add(status_tab, text='设备与动作')
+        self.notebook.add(haptic_tab, text='力反馈手感')
+        body = ttk.Frame(status_tab, padding=10)
         body.pack(fill='x')
         left = ttk.LabelFrame(body, text='MT6701 编码器', padding=10)
         left.pack(side='left', fill='y', padx=(0, 10))
@@ -118,7 +162,7 @@ class App:
         row = ttk.Frame(control)
         row.pack(fill='x')
         self.drive_buttons = []
-        for label, command in [('位置 +1 圈', 'r'), ('位置 -1 圈', 'R')]:
+        for label, command in [('位置 +1 圈', 'rot 360\n'), ('位置 -1 圈', 'rot -360\n')]:
             btn = ttk.Button(row, text=label, command=lambda c=command: self._send(c))
             btn.pack(side='left', padx=(0,6))
             self.drive_buttons.append(btn)
@@ -126,6 +170,8 @@ class App:
         self.btn_recover.pack(side='left')
         self.btn_cal = ttk.Button(row, text='开始慢速校准', command=lambda: self._send('a'))
         self.btn_cal.pack(side='left', padx=(8, 0))
+        ttk.Label(control, text='位置按钮使用安全/低抖动档：0.05 圈/秒，vq≤512，kp=4/kd=0.2/ki=0',
+                  foreground='#9a4e18', font=('Microsoft YaHei UI', 9)).pack(anchor='w', pady=(6,0))
         self.control_text = tk.StringVar(value='设备未就绪')
         ttk.Label(control, textvariable=self.control_text).pack(anchor='w', pady=(6,0))
         spin = ttk.LabelFrame(right, text='无限旋转 SPIN', padding=10)
@@ -167,8 +213,30 @@ class App:
         self.btn_spin.pack(side='left', padx=(10,8))
         self.spin_status = tk.StringVar(value='待机')
         ttk.Label(row, textvariable=self.spin_status).pack(side='left')
-        ttk.Label(spin, text='闭环最高 80%，开环最高 40%；主机 1 秒无命令自动减速释放。',
+        ttk.Label(spin, text='闭环最高 80%，开环最高 20%；电流环由 l 控制；主机 1 秒无命令自动减速释放。',
                   foreground='#9a4e18', font=('Microsoft YaHei UI', 9)).pack(anchor='w', pady=(6,0))
+        vel_row = ttk.Frame(spin)
+        vel_row.pack(fill='x', pady=(7,0))
+        ttk.Label(vel_row, text='闭环速度环').pack(side='left', padx=(0,6))
+        self.spin_vp = tk.DoubleVar(value=SPIN_VEL_KP_DEFAULT)
+        self.spin_vi = tk.DoubleVar(value=SPIN_VEL_KI_DEFAULT)
+        self.spin_vff = tk.DoubleVar(value=SPIN_VEL_FF_DEFAULT)
+        self.spin_vfr = tk.DoubleVar(value=SPIN_VEL_FR_DEFAULT)
+        self.spin_vel_controls = []
+        for label, var, lo, hi, inc in (
+                ('P', self.spin_vp, 0.0, 0.2, 0.001),
+                ('I', self.spin_vi, 0.0, 2.0, 0.005),
+                ('前馈', self.spin_vff, 0.0, 0.2, 0.005),
+                ('摩擦', self.spin_vfr, 0.0, 500.0, 10.0)):
+            ttk.Label(vel_row, text=label).pack(side='left', padx=(6,2))
+            box = ttk.Spinbox(vel_row, width=7, from_=lo, to=hi, increment=inc,
+                              textvariable=var, format='%.3f')
+            box.pack(side='left')
+            self.spin_vel_controls.append(box)
+        self.btn_spin_vel = ttk.Button(vel_row, text='应用', command=self._apply_spin_velocity)
+        self.btn_spin_vel.pack(side='left', padx=(8,0))
+        ttk.Label(spin, text='闭环采用速度 PI + 同步换向前馈，低速不再在静摩擦点卡跳；开环为固定电压矢量。',
+                  foreground='#52637a', font=('Microsoft YaHei UI', 9)).pack(anchor='w', pady=(5,0))
         manual = ttk.LabelFrame(right, text='三相手动调试', padding=10)
         manual.pack(fill='x')
         ttk.Label(manual, text='调制幅度不代表电流限制。最后一次操作后 30 秒自动释放。',
@@ -191,7 +259,7 @@ class App:
             btn = ttk.Radiobutton(row, text=f'{pct}%', value=pct, variable=self.pct, command=self._send_pct)
             btn.pack(side='left', padx=6)
             self.pct_buttons.append(btn)
-        log = ttk.LabelFrame(self.root, text='设备日志', padding=8)
+        log = ttk.LabelFrame(status_tab, text='设备日志', padding=8)
         log.pack(fill='both', expand=True, padx=10, pady=(0,10))
         actions = ttk.Frame(log)
         actions.pack(fill='x', pady=(0,6))
@@ -207,6 +275,93 @@ class App:
         scroll.pack(side='right', fill='y')
         self.txt.configure(yscrollcommand=scroll.set)
         self.txt.pack(fill='both', expand=True)
+        self._build_haptic_tab(haptic_tab)
+
+    def _build_haptic_tab(self, tab):
+        left = ttk.LabelFrame(tab, text='m0–m4 手感模式', padding=10)
+        left.pack(side='left', fill='y', padx=(10, 8), pady=10)
+        modes = ttk.Frame(left)
+        modes.pack(fill='x')
+        for i in sorted(HAPTIC_MODE_NAMES):
+            name = HAPTIC_MODE_NAMES[i]
+            b = ttk.Button(modes, text=f'm{i} {name}', width=12,
+                           command=lambda i=i: self._send(f'm{i}\n'))
+            b.grid(row=i // 2, column=i % 2, padx=3, pady=3, sticky='ew')
+            self.haptic_mode_buttons.append(b)
+        modes.columnconfigure(0, weight=1)
+        modes.columnconfigure(1, weight=1)
+        row = ttk.Frame(left)
+        row.pack(fill='x', pady=(8, 4))
+        ttk.Button(row, text='当前位置设中心', command=lambda: self._send('cd\n')).pack(side='left')
+        ttk.Button(row, text='释放输出', command=lambda: self._send('s')).pack(side='left', padx=6)
+        ttk.Label(left, text='参数松开发送；m3/m4 共用中心。', foreground='#5a6474').pack(anchor='w')
+
+        params_box = ttk.Frame(left)
+        params_box.pack(fill='both', expand=True, pady=(4, 0))
+        self.haptic_param_canvas = tk.Canvas(params_box, highlightthickness=0, width=390)
+        param_scroll = ttk.Scrollbar(params_box, orient='vertical',
+                                     command=self.haptic_param_canvas.yview)
+        self.haptic_param_canvas.configure(yscrollcommand=param_scroll.set)
+        self.haptic_param_canvas.pack(side='left', fill='both', expand=True)
+        param_scroll.pack(side='right', fill='y')
+        param_inner = ttk.Frame(self.haptic_param_canvas)
+        param_window = self.haptic_param_canvas.create_window(
+            (0, 0), window=param_inner, anchor='nw')
+        param_inner.bind(
+            '<Configure>',
+            lambda event: self.haptic_param_canvas.configure(
+                scrollregion=self.haptic_param_canvas.bbox('all')))
+        self.haptic_param_canvas.bind(
+            '<Configure>',
+            lambda event: self.haptic_param_canvas.itemconfigure(
+                param_window, width=event.width))
+        self.haptic_param_canvas.bind(
+            '<Enter>',
+            lambda event: self.haptic_param_canvas.bind_all(
+                '<MouseWheel>',
+                lambda wheel: self.haptic_param_canvas.yview_scroll(
+                    -1 if wheel.delta > 0 else 1, 'units')))
+        self.haptic_param_canvas.bind(
+            '<Leave>',
+            lambda event: self.haptic_param_canvas.unbind_all('<MouseWheel>'))
+
+        for key, label, lo, hi, res, dft, shown, wire in HAPTIC_PARAMS:
+            row = ttk.Frame(param_inner)
+            row.pack(fill='x', pady=1)
+            ttk.Label(row, text=label, width=19).pack(side='left')
+            val = ttk.Label(row, text=shown.format(dft), width=7, anchor='e')
+            val.pack(side='right')
+            sc = tk.Scale(row, from_=lo, to=hi, resolution=res, orient='horizontal',
+                          showvalue=False, length=180)
+            sc.set(dft)
+            sc.pack(side='left', fill='x', expand=True)
+            sc.bind('<ButtonRelease-1>', lambda e, k=key, f=wire: self._apply_haptic_param(k, f))
+            sc.bind('<KeyRelease>', lambda e, k=key, f=wire: self._apply_haptic_param(k, f))
+            self.haptic_scales[key] = (sc, val, shown, wire)
+
+        right = ttk.LabelFrame(tab, text='实时曲线 / MT6701 原生角度', padding=10)
+        right.pack(side='left', fill='both', expand=True, padx=(2, 10), pady=10)
+        self.haptic_live = tk.StringVar(value='连接后等待 $T 遥测')
+        ttk.Label(right, textvariable=self.haptic_live, font=('Consolas', 11),
+                  wraplength=480, justify='left').pack(anchor='w')
+        self.haptic_canvas = tk.Canvas(right, bg='#111a2a', highlightthickness=0, height=520)
+        self.haptic_canvas.pack(fill='both', expand=True, pady=(8, 0))
+        ttk.Label(right, text='上：角度/目标(deg)  中：速度(rad/s)  下：力矩(Q12)',
+                  foreground='#5a6474').pack(anchor='w', pady=(5, 0))
+
+    def _apply_haptic_param(self, key, wire):
+        sc, val, shown, _ = self.haptic_scales[key]
+        x = sc.get()
+        val.configure(text=shown.format(x))
+        if self.ser:
+            self._send((wire.format(x) + '\n'))
+
+    def _telemetry_changed(self, event=None):
+        text = self.tel_rate.get()
+        hz = 0 if text == '关闭' else int(text.split()[0])
+        self.tel_requested = True
+        if self.ser:
+            self._send(f'tel {hz}\n')
 
     def _refresh_ports(self):
         self.port['values'] = list_ports()
@@ -222,10 +377,15 @@ class App:
             return
         self.ser = port
         self.model = PanelState()
+        self.model.encoder_direction = ENCODER_DISPLAY_DIRECTION
         self.last_summary = None
         self.timeout_stopped = False
         self.command_pending_until = 0
         self.spin_stop_at = 0.0
+        self.tel_requested = False
+        self.next_status_poll = 0.0
+        self.haptic_history.clear()
+        self.haptic_latest = None
         self.rxq = queue.Queue()
         self.stop_evt = threading.Event()
         self.reader_thread = threading.Thread(target=self._reader, args=(port,self.stop_evt,self.rxq), daemon=True)
@@ -236,14 +396,18 @@ class App:
         self._log(f'已连接 {port.port}，等待诊断协议')
         try:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
-            self.record_path = LOG_DIR / f'panel-{datetime.now():%Y%m%d-%H%M%S-%f}.csv'
+            stamp = f'{datetime.now():%Y%m%d-%H%M%S-%f}'
+            self.record_path = LOG_DIR / f'panel-{stamp}.csv'
             self.record_file = self.record_path.open('w',encoding='utf-8-sig',newline='')
             self.record_writer = None
-            self._log(f'采样自动记录：{self.record_path.name}')
+            self.trace_path = LOG_DIR / f'haptic-{stamp}.csv'
+            self.trace_file = self.trace_path.open('w',encoding='utf-8-sig',newline='')
+            self.trace_writer = None
+            self._log(f'采样自动记录：{self.record_path.name} / {self.trace_path.name}')
         except OSError as exc:
             self._log(f'记录文件不可用：{exc}')
         self._send('s')
-        self._send('?')
+        self._send('?\n')
         self._enable_controls()
 
     @staticmethod
@@ -268,7 +432,7 @@ class App:
         port, self.ser = self.ser, None
         self.stop_evt.set()
         try:
-            port.write(b's')
+            port.write(b'tel 0\ns\n')
             port.close()
         except (serial.SerialException, OSError):
             port.close()
@@ -277,7 +441,12 @@ class App:
         if self.record_file:
             self.record_file.close()
             self.record_file = self.record_writer = None
+        if self.trace_file:
+            self.trace_file.close()
+            self.trace_file = self.trace_writer = None
+        self.tel_requested = False
         self.model = PanelState()
+        self.model.encoder_direction = ENCODER_DISPLAY_DIRECTION
         self.port.configure(state='normal')
         self.btn_conn.configure(text='连接')
         self.lbl_conn.configure(text='未连接')
@@ -289,35 +458,52 @@ class App:
         if not self.ser:
             return False
         now = time.monotonic()
-        if command == 'a':
+        cmd = command.strip()
+        word = cmd.split()[0] if cmd else ''
+        haptic_params = {p[0] for p in HAPTIC_PARAMS}
+        if cmd == 'a':
             allowed = self.model.can_calibrate(now)
-        elif command == 'A':
+        elif cmd == 'A':
             allowed = self.model.calibration_active(now)
-        elif command == 'z':
+        elif cmd == 'z':
             allowed = self.model.can_recover(now)
-        elif command.startswith(('x','w')):
+        elif cmd.startswith(('x','w')):
             allowed = self.model.can_manual(now)
-        elif command in ('p', 'P'):
+        elif cmd in ('p', 'P'):
             allowed = self.model.can_drive(now)
-        elif command[:1] in ('V', 'W', '#'):
+        elif cmd[:1] in ('V', 'W', '#'):
             allowed = self.model.can_spin_control(now)
-        elif command == 'g' or command in ('s','?','f','d','h'):
+        elif cmd.startswith(('vp ', 'vi ', 'vff ', 'vfr ')):
+            allowed = self.model.can_spin_control(now)
+        elif cmd.startswith('tel ') or cmd in ('s','?','f','d','h'):
+            allowed = True
+        elif (cmd in {f'm{i}' for i in range(5)} or cmd == 'cd' or
+              word in haptic_params or word == 'rot'):
+            allowed = self.model.can_haptic(now)
+        elif cmd == 'g':
             allowed = True
         else:
             allowed = self.model.can_drive(now)
         if not allowed:
-            self._log('设备未就绪，命令未发送：'+command)
+            self._log('设备未就绪，命令未发送：'+cmd)
             return False
         try:
             self.ser.write(command.encode('ascii'))
+            flush = getattr(self.ser, 'flush', None)
+            if flush:
+                flush()
         except (serial.SerialException, OSError) as exc:
             self._log('串口写入失败：'+str(exc))
             self._disconnect()
             return False
-        if command != '?':
-            self._log('TX '+command)
-        if (command in ('a','A','m','r','R','z','p','P') or
-                command.startswith(('x','w','V','W','#'))):
+        if cmd != '?':
+            self._log('TX '+cmd)
+        if cmd.startswith('tel '):
+            self.tel_requested = True
+        if (cmd in ('a','A','m','r','R','z','p','P','cd') or
+                cmd in {f'm{i}' for i in range(5)} or
+                cmd.startswith(('x','w','V','W','#','rot ','vp ','vi ','vff ','vfr ')) or
+                word in haptic_params):
             self.command_pending_until = now + 0.3
         return True
 
@@ -345,8 +531,20 @@ class App:
     def _spin_speed_changed(self, event=None):
         gear, rps = self._spin_speed_gear()
         if self.model.spin_active(time.monotonic()):
-            self._send('V%d' % gear)
+            self._send('V%d\n' % gear)
         self.spin_status.set(f'速度设定 {rps:.2f} 圈/秒 ({rps*60:.0f} rpm)')
+
+    def _apply_spin_velocity(self):
+        for name, var in (('vp', self.spin_vp), ('vi', self.spin_vi),
+                          ('vff', self.spin_vff), ('vfr', self.spin_vfr)):
+            try:
+                value = float(var.get())
+            except (tk.TclError, ValueError):
+                self._log(f'速度环参数 {name} 无效')
+                return
+            self._send(f'{name} {value:.6f}\n')
+            time.sleep(0.02)
+        self.spin_status.set('闭环速度环参数已发送')
 
     def _spin_mode_changed(self):
         is_open = self.spin_mode.get() == 'open'
@@ -361,12 +559,12 @@ class App:
         pct = max(10, min(cap, int(round(self.spin_power.get() / 10.0)) * 10))
         self.spin_power.set(pct)
         if self.model.spin_active(time.monotonic()):
-            self._send('W%d' % (pct // 10))
+            self._send('W%d\n' % (pct // 10))
 
     def _toggle_spin(self):
         now = time.monotonic()
         if self.model.spin_active(now):
-            self._send('s')
+            self._send('s\n')
             self.spin_stop_at = now
             self.spin_status.set('减速停止中…')
             return
@@ -378,16 +576,22 @@ class App:
         pct = max(10, min(cap, int(round(self.spin_power.get() / 10.0)) * 10))
         self.spin_power.set(pct)
         mode = 1 if self.spin_mode.get() == 'open' else 0
-        self._send('#%d' % mode)
-        self._send('V%d' % gear)
-        self._send('W%d' % (pct // 10))
-        self._send('p' if self.spin_dir.get() > 0 else 'P')
+        self._send('#%d\n' % mode)
+        time.sleep(0.02)
+        self._send('V%d\n' % gear)
+        time.sleep(0.02)
+        self._send('W%d\n' % (pct // 10))
+        time.sleep(0.02)
+        if mode == 0:
+            self._apply_spin_velocity()
+        self._send('p\n' if self.spin_dir.get() > 0 else 'P\n')
         self.spin_stop_at = 0
         self.spin_status.set(f"启动中：{'开环' if mode else '闭环'} {rps:.2f} 圈/秒，力度上限 {pct}%")
 
     def _enable_controls(self):
         now = time.monotonic()
         ready = self.ser is not None and self.model.can_drive(now)
+        haptic = self.ser is not None and self.model.can_haptic(now)
         manual = self.ser is not None and self.model.can_manual(now)
         spin = self.ser is not None and self.model.spin_active(now)
         pending = now < self.command_pending_until
@@ -407,6 +611,11 @@ class App:
             state='readonly' if (ready or spin) and not pending else 'disabled')
         self.spin_scale.configure(
             state='normal' if (ready or spin) and not pending else 'disabled')
+        vel_state = ('normal' if (ready or spin) and
+                     self.spin_mode.get() != 'open' and not pending else 'disabled')
+        for box in self.spin_vel_controls:
+            box.configure(state=vel_state)
+        self.btn_spin_vel.configure(state=vel_state)
         if spin:
             self.btn_spin.configure(state='normal', text='停止无限旋转')
         elif ready and not pending:
@@ -420,6 +629,10 @@ class App:
             state='normal' if (calibration_active or calibration_allowed) and not pending else 'disabled',
             text='取消校准' if calibration_active else '开始慢速校准',
             command=(lambda: self._send('A')) if calibration_active else (lambda: self._send('a')))
+        for button in self.haptic_mode_buttons:
+            button.configure(state='normal' if haptic and not pending else 'disabled')
+        for sc, _val, _shown, _wire in self.haptic_scales.values():
+            sc.configure(state='normal' if haptic and not pending else 'disabled')
         for button in self.read_buttons+[self.btn_stop]:
             button.configure(state='normal' if self.ser else 'disabled')
 
@@ -434,6 +647,9 @@ class App:
         self.fault_text.set('故障原因：等待设备状态')
         self.control_text.set('设备未就绪')
         self.spin_status.set('待机')
+        self.haptic_live.set('连接后等待 $T 遥测')
+        for button in self.haptic_mode_buttons:
+            button.state(['!pressed'])
         self.banner.configure(text='未连接',bg='#e8edf4',fg='#28374d')
         for i, button in enumerate(self.phase_buttons):
             button.configure(text=f"{'ABC'[i]} 关闭")
@@ -445,9 +661,11 @@ class App:
             self._log('检测到设备重启，累计角度已重置')
         self.timeout_stopped = False
         v = status.values
-        deg = v['ang'] * 360.0/16384
+        raw_display = (v['ang'] if ENCODER_DISPLAY_DIRECTION > 0
+                       else (-v['ang']) & 0x3fff)
+        deg = raw_display * 360.0/16384
         self.angle_text.set(f'{deg:.1f}°' if v['encok'] else '--.-°')
-        self.encoder_text.set(f"raw {v['ang']} / CRC失败 {v['crc']}" if v['encok'] else f"采样无效 / CRC失败 {v['crc']}")
+        self.encoder_text.set(f"raw {raw_display} / CRC失败 {v['crc']}" if v['encok'] else f"采样无效 / CRC失败 {v['crc']}")
         self.turns_text.set(f'相对累计  {self.model.turns:+.3f} 圈')
         a = math.radians(deg-90)
         self.canvas.coords(self.needle,120,120,120+82*math.cos(a),120+82*math.sin(a))
@@ -472,18 +690,28 @@ class App:
             button.configure(text=f"{'ABC'[i]} {level}")
         if v['mode'] == 1 and v['pct'] in (5,10,15,20):
             self.pct.set(v['pct'])
-        if v['mode'] == 2:
-            rpm = v['vel'] * 60.0 / 16384.0
+        haptic_mode = v['hm'] if v['mode'] == 3 else None
+        for i, button in enumerate(self.haptic_mode_buttons):
+            button.state(['pressed'] if haptic_mode == i else ['!pressed'])
+        if v['mode'] == 3:
+            self.spin_status.set(f"力反馈 m{v['hm']} {status.haptic_name} 运行中 · 松开转动手感")
+        elif v['mode'] == 2:
             is_open = bool(v.get('open'))
+            rpm = v.get('vfb', v['vel']) * 60.0 / 16384.0
+            target_rpm = v.get('vsp', v['vel']) * 60.0 / 16384.0
             self.spin_mode.set('open' if is_open else 'closed')
             self.spin_scale.configure(to=SPIN_OPENLOOP_POWER_MAX if is_open else 80)
             if is_open and self.spin_power.get() > SPIN_OPENLOOP_POWER_MAX:
                 self.spin_power.set(SPIN_OPENLOOP_POWER_MAX)
             if self.spin_stop_at and now - self.spin_stop_at < 2.5:
                 self.spin_status.set(f'减速停止中：{rpm:+.1f} rpm')
+            elif not is_open:
+                self.spin_status.set(
+                    f"闭环运行：目标 {target_rpm:+.1f} / 实测 {rpm:+.1f} rpm，"
+                    f"误差 {v.get('verr', 0)} raw/s，vq={v['vq']}")
             else:
                 self.spin_status.set(
-                    f"{'开环' if is_open else '闭环'}运行：{rpm:+.1f} rpm，力度上限 {v['pct']}%，vq={v['vq']}")
+                    f"开环运行：{rpm:+.1f} rpm，力度上限 {v['pct']}%，vq={v['vq']}")
         elif v['st'] == 1:
             self.spin_status.set('其他动作运行中')
         else:
@@ -494,7 +722,8 @@ class App:
             if not v['aligned']:
                 text += ' · 排除故障后重新启动完成标定'
         elif v['st'] == 1:
-            text, bg, fg = ('无限旋转运行中' if v['mode'] == 2 else
+            text, bg, fg = ('力反馈手感运行中 · ' + status.haptic_name if v['mode'] == 3 else
+                            '无限旋转运行中' if v['mode'] == 2 else
                             '手动调试运行中' if v['mode'] == 1 else '动作执行中'), '#fff0cf', '#815000'
         elif status.drive_ready:
             text, bg, fg = '设备就绪 · 等待动作指令', '#dbf4e9', '#176249'
@@ -504,7 +733,7 @@ class App:
             text = '故障状态仍有 PWM 使能，请立即检查硬件'
         self.banner.configure(text=text,bg=bg,fg=fg)
         self.lbl_conn.configure(text=f'{self.ser.port} 通信正常')
-        summary = (v['st'],v['mode'],v['fault'],v['drvok'],v['encok'],v['cal'])
+        summary = (v['st'],v['mode'],v['hm'],v['fault'],v['drvok'],v['encok'],v['cal'])
         if summary != self.last_summary:
             self._log(f"状态：{STATE_NAMES[v['st']]}；{status.fault_text}")
             self.last_summary = summary
@@ -516,13 +745,98 @@ class App:
                     self.record_writer = csv.DictWriter(self.record_file,fieldnames=list(row))
                     self.record_writer.writeheader()
                 self.record_writer.writerow(row)
-                self.record_file.flush()
             except (OSError,ValueError) as exc:
                 self._log('采样记录停止：'+str(exc))
                 self.record_file.close()
                 self.record_file = self.record_writer = None
+        if not self.tel_requested:
+            text = self.tel_rate.get()
+            hz = 0 if text == '关闭' else int(text.split()[0])
+            self._send(f'tel {hz}\n')
+
+    def _accept_telemetry(self, telemetry):
+        now = time.monotonic()
+        row = {
+            'host_time': datetime.now().isoformat(timespec='milliseconds'),
+            'port': self.ser.port if self.ser else '',
+            **telemetry.values,
+        }
+        self.haptic_history.append((now, telemetry))
+        self.haptic_latest = telemetry
+        v = telemetry.values
+        if 'raw' in v and (self.model.status is None or self.model.status['encok']):
+            raw = (v['raw'] if ENCODER_DISPLAY_DIRECTION > 0
+                   else (-v['raw']) & 0x3fff)
+            deg = raw * 360.0 / 16384.0
+            self.angle_text.set(f'{deg:.1f}°')
+            self.encoder_text.set(f'raw {raw} / ISR {v["hz"]} Hz')
+            a = math.radians(deg - 90)
+            self.canvas.coords(self.needle, 120, 120,
+                               120 + 82 * math.cos(a), 120 + 82 * math.sin(a))
+            self.canvas.itemconfigure(self.needle, state='normal')
+        self.haptic_live.set(
+            f"m{v['hm']} {HAPTIC_MODE_NAMES[v['hm']]} | "
+            f"ang {v['ang']:+8.2f}°  tgt {v['tgt']:+8.2f}°\n"
+            f"vel {v['vel']:+7.2f} rad/s | tq {v['tq']:+6d} Q12\n"
+            f"pos {v['pos']:+d} | sub {v['sub']:+.2f} | {v['hz']} Hz")
+        if self.trace_file:
+            try:
+                if self.trace_writer is None:
+                    self.trace_writer = csv.DictWriter(self.trace_file, fieldnames=list(row))
+                    self.trace_writer.writeheader()
+                self.trace_writer.writerow(row)
+            except (OSError, ValueError) as exc:
+                self._log('手感遥测记录停止：'+str(exc))
+                self.trace_file.close()
+                self.trace_file = self.trace_writer = None
+
+    def _draw_haptic_curves(self):
+        now = time.monotonic()
+        if now - self.haptic_last_draw < 0.1 or not self.haptic_history:
+            return
+        self.haptic_last_draw = now
+        cutoff = now - 10.0
+        rows = [t.values for ts, t in self.haptic_history if ts >= cutoff]
+        if len(rows) < 2:
+            return
+        c = self.haptic_canvas
+        w = max(320, c.winfo_width())
+        h = max(260, c.winfo_height())
+        pad = 34
+        band = (h - 2 * pad) / 3.0
+        c.delete('trace')
+        for i, label in enumerate(('ANGLE deg', 'VEL rad/s', 'TQ Q12')):
+            y0 = pad + i * band
+            c.create_line(28, y0, w - 8, y0, fill='#33415a', tags='trace')
+            c.create_line(28, y0 + band - 4, w - 8, y0 + band - 4,
+                          fill='#202d44', tags='trace')
+            c.create_text(4, y0 + 3, text=label, anchor='nw', fill='#8fa3c4',
+                          font=('Consolas', 8), tags='trace')
+
+        def line(vals, idx, color):
+            lo = min(vals)
+            hi = max(vals)
+            if hi - lo < 1e-9:
+                lo -= 1.0
+                hi += 1.0
+            y0 = pad + idx * band
+            pts = []
+            for j, val in enumerate(vals):
+                x = 30 + (w - 40) * j / max(1, len(vals) - 1)
+                y = y0 + band - 8 - (band - 16) * (val - lo) / (hi - lo)
+                pts.extend((x, y))
+            if len(pts) >= 4:
+                c.create_line(*pts, fill=color, width=1.5, tags='trace')
+            c.create_text(w - 8, y0 + 2, text=f'max {hi:.2f} min {lo:.2f}',
+                          anchor='ne', fill='#7186a8', font=('Consolas', 8), tags='trace')
+
+        line([r['ang'] for r in rows], 0, '#4fd1c5')
+        line([r['tgt'] for r in rows], 0, '#f6ad55')
+        line([r['vel'] for r in rows], 1, '#63b3ed')
+        line([r['tq'] for r in rows], 2, '#f687b3')
 
     def _tick(self):
+        now = time.monotonic()
         for _ in range(200):
             try:
                 kind,line = self.rxq.get_nowait()
@@ -532,6 +846,11 @@ class App:
                 self._log('串口读取失败：'+line)
                 self._disconnect()
                 break
+            if line.startswith('$T,'):
+                telemetry = Telemetry.parse(line)
+                if telemetry and self.ser:
+                    self._accept_telemetry(telemetry)
+                continue
             if line.startswith('#FOC,'):
                 status = Status.parse(line)
                 if status and self.ser:
@@ -539,13 +858,23 @@ class App:
                 elif self.last_summary != 'invalid':
                     self._send('s')
                     self.model = PanelState()
+                    self.model.encoder_direction = ENCODER_DISPLAY_DIRECTION
                     self._clear_values()
-                    self._log('状态帧缺失或协议不兼容，要求 proto=2 / diag=1；控制已禁用')
+                    self._log('状态帧缺失或协议不兼容，要求 proto=3 / diag=1；控制已禁用')
                     self.last_summary = 'invalid'
             elif line and not line.startswith('isr='):
                 self._log(line)
+        self._draw_haptic_curves()
+        if self.record_file and now - self.last_record_flush >= 0.5:
+            try:
+                self.record_file.flush()
+                if self.trace_file:
+                    self.trace_file.flush()
+                self.last_record_flush = now
+            except OSError as exc:
+                self._log('采样刷新失败：'+str(exc))
         if self.ser:
-            if not self.model.fresh(time.monotonic()):
+            if not self.model.fresh(now):
                 self.health_box.configure(text='健康状态与采样（等待更新 / 上次状态）')
                 self.lbl_conn.configure(text=f'{self.ser.port} 等待状态 / 超时')
                 self.banner.configure(text='等待有效诊断帧 / 通信超时 · 动作控制已禁用',bg='#fff0cf',fg='#815000')
@@ -555,7 +884,10 @@ class App:
                     self._send('s')
                     self.timeout_stopped = True
                     self._log('状态超过 2 秒未更新，已尝试释放输出')
-            self._send('?')
+            if now >= self.next_status_poll:
+                self._send('?\n')
+                interval = 0.5 if self.tel_rate.get() != '关闭' else POLL_MS / 1000.0
+                self.next_status_poll = now + interval
         self._enable_controls()
         self.timer = self.root.after(POLL_MS,self._tick)
 

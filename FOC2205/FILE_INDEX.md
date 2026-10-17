@@ -1,15 +1,15 @@
 # FOC2205 文件导航
 
-更新：2026-10-17（板级硬件资料归入 `docs/hardware/`）。工作区总索引见根目录 `INDEX.md`。硬件和功能入口见 README；重构与复查证据见 `docs/refactor-audit-2026-10-16.md`、`docs/code-audit-2026-10-16.md`，最新通电实测见 `docs/smoothness-2026-10-17.md` 与 `docs/powered-debug-2026-10-17.md`（历史：`docs/powered-debug-2026-10-16.md`）。历史调参快照在 `experiments/notes/`，不用于判断当前功能。
+更新：2026-10-17（新增 m0–m4 力反馈、闭环速度 PI + 同步换向前馈、GUI 实连与自动验收）。工作区总索引见根目录 `INDEX.md`。硬件和功能入口见 README；最新闭环结论见 `docs/closed-loop-velocity-2026-10-17.md`，重构与复查证据见 `docs/refactor-audit-2026-10-16.md`、`docs/code-audit-2026-10-16.md`，历史平滑与通电记录见 `docs/smoothness-2026-10-17.md` 与 `docs/powered-debug-2026-10-17.md`。历史调参快照在 `experiments/notes/`，不用于判断当前功能。
 
 | 文件或目录 | 用途 |
 |---|---|
 | `platformio.ini`、`foc2205.ve` | PIO 环境（bringup 调试镜像含 25% 力度上限 flag）、QFN32 器件、压缩格式和引脚分配 |
 | `src/main.c` | 上电自检、对齐、ISR 注册、主循环及结果上报 |
-| `src/console.c/h` | UART 字符命令、紧急停止优先级、参数超时、v2 状态帧 |
+| `src/console.c/h` | UART 命令（兼容旧单字符、m0–m4 与 `vp/vi/vff/vfr` 参数行）、高频 `$T` 遥测、紧急停止优先级、v3 状态帧 |
 | `src/control.c/h` | ISR 故障检测、驱动状态轮询和显式恢复检查 |
 | `src/control_lock.h` | 保存/恢复 RISC-V 全局中断状态的短临界区 |
-| `src/motion.c/h` | 动作状态机、定点位置轨迹、混合/开环换向、手动超时；当前唯一闭环为位置环 |
+| `src/motion.c/h` | 动作状态机、定点位置轨迹、闭环 SPIN 速度 PI + 同步换向前馈、开环换向、手动/SPIN/手感看门狗 |
 | `src/foc.c/h` | 电压模式调制（逆 Park/Clarke→SVPWM）、编码器有效帧缓存、环形零偏标定；电流仅用于跳闸与遥测 |
 | `src/calibration.c/h` | 电角度零偏校准状态机（3% 调制扫角，stage 0–9，可取消） |
 | `src/current.c/h` | 三 ADC 启动、截止等待、零点校准及遥测 |
@@ -19,6 +19,7 @@
 | `src/app_io.c/h` | GPIO/SPI 初始化、限时单相 SPI 传输、延时 |
 | `src/analog_ip.h` | CPLD ADC 与外设寄存器定义 |
 | `src/build_config.h` | 构建期安全门：默认镜像禁止访问 0x6000xxxx CPLD 窗口 |
+| `src/haptic.c/h` | m0 自由 / m1 阻尼 / m2 惯性 / m3 原生连续角挡位 / m4 有界回拉，统一 Q12 力矩算法与状态 |
 | `logic/analog_ip.v` | 三 ADC 硬宏、AHB/APB 外设和 SPI 桥实例 |
 | `logic/spi_mode_wrap.v` | SPI 重定时、接收锁存、APB 状态 |
 | `logic/ahb2apb.v`、`logic/reg_ctrl.v` | SDK 总线与寄存器桥 |
@@ -27,21 +28,23 @@
 | `logic/foc2205.v`、`*.qsf/qpf/sdc/vex/asf`、`af_*.tcl`、`analog_ip_tmpl.v` | prelogic/工具生成文件；顶层勿手改 |
 | `logic/foc2205.bin/inc`、`foc2205_batch.bin`、`foc2205_routed.v` | 本轮生成的位流、C 数组、批量包和布线网表 |
 | `logic/quartus_validated.json`、`quartus_logs/`、`alta_db/`、`*.log` | 本地构建证据与数据库，忽略入库 |
-| `tools/foc_panel.py`、`run_foc_panel.bat` | 带 diag=1 诊断、条件控制、SPIN（3/6/15 rpm、10–80%）、有效性/超时检测及 CSV 记录的 v2 上位机 |
-| `tools/foc_protocol.py` | 协议 v2 遥测解析与面板状态模型，供上位机与测试共用（无串口 I/O） |
+| `tools/foc_panel.py`、`run_foc_panel.bat` | 协议 v3 完整调试台：设备/动作/SPIN/手动/手感页、闭环速度环参数、100 Hz 实时曲线与独立 CSV |
+| `tools/foc_protocol.py` | 协议 v3 状态、速度环字段、紧凑 `$T` 遥测解析与面板状态模型，供上位机与测试共用（无串口 I/O） |
 | `tools/uart_console.py`、`uart_capture.py` | 字符命令与串口记录 |
 | `tools/reset_run.bat`、`soft_reset.bat` | DAPLink 运行和软件复位 |
 | `tools/probe_state.bat` | 内核无法 halt 时绕过 examine 直读 DMI（dmstatus/sbcs），判定 AHB 总线挂起 |
 | `tools/uart_flash_probe.bat`、`uart_flash_all.bat` | UART ISP：BOOT0=3V3+断电重启后探测 / 全量重烧（先 logic 后程序） |
-| `experiments/tests/run_tests.py`、`control_regression.c`、`stubs/` | 主机回归入口：GCC 编译实际控制源码+硬件桩，跑断言回归与协议测试，不碰串口 |
-| `experiments/tests/test_panel_protocol.py` | 宿主协议、数据有效性、超时与操作条件单元测试 |
+| `experiments/tests/run_tests.py`、`control_regression.c`、`stubs/` | 主机回归入口：GCC 编译实际控制源码+硬件桩，覆盖闭环速度 PI、m0–m4、看门狗、协议与 Python 语法 |
+| `experiments/tests/test_panel_protocol.py` | 协议 v3、速度环字段、`cl/open` 强类型、手感状态门控、`$T` 错帧与操作条件单元测试 |
+| `experiments/tests/gui_spin_smoke.py`、`gui_position_smoke.py` | 隐藏 Tk 实连 COM26：闭环 SPIN 启停/跟踪，以及 `rot ±360` 面板按钮端到端验收 |
+| `experiments/tests/haptic/` | m0–m4 自动验收：`haptic_mode_probe.py`、`haptic_wall_probe.py`、串口/指标公共模块；输出 summary JSON、逐例 CSV 和串口日志 |
 | `experiments/tests/hardware_unpowered.py` | 实板负向测试：驱动未供电时验证故障上报与命令拒绝 |
 | `experiments/tests/ahb2apb_tb.v` | AHB2APB 桥 Verilog 测试台 |
 | `experiments/tests/accept_openloop.py` | 开环验收运行器：绝对设定调制/速度档，跑 5 圈并逐帧展开编码器机械角 |
 | `experiments/tests/nfault/` | nFAULT/硬件断路验证：DRV 自故障注入、halt 冻结确认、全流程脚本与说明 |
 | `experiments/tests/calibrate.py` | 校准运行器：`s`→`a`→轮询 `calst=7/9`，兼作校准链路看门狗喂狗 |
 | `experiments/tests/accept_closedloop.py` | 闭环验收运行器：连发 N 个单圈位置伺服，逐圈报告位移/误差/调制/反向步进/glitch |
-| `experiments/tests/spin/` | 无限旋转验收：`accept_spin.py` 按 20/40/60/80% × V1–V4 × 正反方向自动喂 100 ms 心跳、逐档停转读 `F`，并验证 3.5 s 失联减速释放；`capture_spin.py` 20 Hz 稳态遥测/FFT 纹波诊断；`wait_and_run.py` 等待冷上电后自动校准并执行整套矩阵；`flash_then_auto.py` 等待 ROM UART loader，按“MCU→CPLD→回读比对”烧写后接续测试 |
+| `experiments/tests/spin/` | 无限旋转验收：`accept_spin.py` 跑开/闭环速度×力度×方向矩阵并验证 3.5 s 失联释放；`capture_spin.py` 支持开/闭环、速度环参数注入、20 Hz 稳态遥测/FFT；`wait_and_run.py` 与 `flash_then_auto.py` 负责冷启动/烧录接续 |
 | `experiments/tests/current_loop/` | 电流环/过流取证：`accept_current_loop.py`（A/B 段）、`snap_walk2.py`+`walk_one.py`（坏窗口定位）、`set_preset.py`/`prep_ED.py`（配置对齐）、`run_window_move.py`（单步 E/D 取证）、`final_state.py`（收尾）；平滑扫描：`smoothness_sweep.py`（速度×力度/调参/候选/验收矩阵，`--blocks matrix,slow,ref,repeat,gains,tune,cand,candmat,candrep,kiscan,slow2,fast,edges12,posgain,accept5,accept8,force8,slow8,soak` 选择）、`hyb_rate_test.py`（hybrid-ISR 速率对照）、`session_close.py`（候选确认收尾）、`smooth_analyze.py`（日志离析） |
 | `experiments/tests/force_sweep/` | 力度档扫描：探针精写 `vq_max` 后单圈运行、跳闸自动 `z` 恢复重试；`recover.py`/`jog.py`/`restore_cfg.py` 辅助 |
 | `experiments/probes/`、`archive_manifest.csv` | 40 个历史探测脚本与 1 个 APB_CLKEN 探测输出原样归档 + 路径/大小/SHA256 清单；相对路径不作运行保证 |
@@ -60,6 +63,9 @@
 | `docs/smoothness-2026-10-17.md` | 闭环平滑扫描（hyb=0）：速度×力度矩阵与重复性、hybrid 致 ISR 20 kHz→~12 kHz 定性、运动 kp=8 + kd60 + filt256 推荐配置与开机序列、kp=2/kp=8 五连圈验收、力度上限表、24 圈 soak、30 rpm 起步失败模式 |
 | `docs/openloop-repeat-2026-10-17.md` | `fw=20261017.11` 开环六组合重复性：3/6/15 rpm 正反向各 5 圈，全部通过，零反向步进/零 glitch |
 | `docs/position-accel-2026-10-17.md` | `fw=20261017.12` 位置轨迹加减速：0.25/1536 10/10、0.50/1013/768 各 10/10、0.50/1536/2048 各 2/2，全部 DONE，无起步跳闸 |
+| `docs/closed-loop-velocity-2026-10-17.md` | `fw=20261017.24` 闭环速度 PI + 同步换向前馈：根因、SimpleFOC 参考、V1–V4/40%/80% 矩阵、开环/电流环对照、GUI/位置实连与 WDOG 恢复 |
+| `docs/foc2205-fw-20261017.24-release.md` | GitHub 发布备注：`fw=20261017.24`、tag `foc2205-fw-20261017.24`、闭环 PASS、验证矩阵与上位机结论 |
+| `docs/haptic-modes-2026-10-17.md` | `fw=20261017.23` m0–m4 实现、PWM 采样边沿修复、1800 LSB 过流阈值、开环软启动/20% 上限、`rot ±360` 安全位置/低抖动档、高频原始角遥测、自动矩阵与人工体感边界 |
 | `docs/spin-acceptance-2026-10-17.md` | `fw=20261017.5` SPIN 24 档与位置闭环 force8 验收：24/24 PASS、失联保护、编码器状态位 100 ms 判据、串口烧录顺序与 nRST 结论 |
 | `docs/*接线设计.md`、`*引脚*.md`、`*网表.md` | 硬件设计资料；当前引脚以 VE 为准 |
 | `docs/hardware/` | **板级硬件资料总目录**：原理图、EasyEDA 网表、器件规格书（详见其 README） |

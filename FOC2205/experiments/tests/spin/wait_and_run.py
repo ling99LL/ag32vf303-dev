@@ -43,7 +43,7 @@ def probe(port, seconds=.7):
 
 
 def safe_idle(frame):
-    return (frame and frame.get('fw') == '20261017.10' and
+    return (frame and frame.get('proto') == '3' and
             frame.get('st') == '0' and frame.get('out') == '0' and
             frame.get('brk') == '0' and frame.get('calst') not in
             ('1', '2', '3', '4', '5', '6') and

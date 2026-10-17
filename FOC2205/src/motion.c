@@ -6,6 +6,7 @@
 #include "control_lock.h"
 #include "control.h"
 #include "calibration.h"
+#include "haptic.h"
 
 #define TWO_PI_F 6.28318530718f
 #define PI_F 3.14159265359f
@@ -15,24 +16,29 @@
 #define MAX_DURATION_MS 3600000u
 #define SPIN_TIMEOUT_MS 1000u
 #define SPIN_STOP_TIMEOUT_MS 2000u
+#define HAPTIC_TIMEOUT_MS 1000u
 #define SPIN_RPS_MIN 0.05f
 #define SPIN_RPS_MAX 1.00f
 #define SPIN_ACCEL_RAWPS2 12288          // 0.75 turn/s^2
 #define SPIN_STOP_VEL_RAWPS (RAW_TURN / 100)
 #define MOTION_POS_ACCEL_RPS2 0.75f
+#define SPIN_VEL_LPF_TAU_S 0.015f
+#define SPIN_VQ_RAMP_FULL_SCALE_PER_S 5.0f
 
 motion_cfg_t g_motion_cfg = {
   .kp=2.0f, .kd=0.02f, .kd_hold=0.0f, .ki=1.5f,
   .kff=0.125f, .kfric=150.0f, .vq_max=1638, .rev_per_s=0.05f,
   .err_follow=500.0f, .err_limit=2048.0f, .settle_raw=200,
   .timeout_ms=10000u, .hyb_slip_deg=15.0f,
-  .hyb_corr_pct=0.35f, .hyb_corr_floor=0.05f
+  .hyb_corr_pct=0.35f, .hyb_corr_floor=0.05f,
+  .spin_vel_kp=0.01f, .spin_vel_ki=0.05f,
+  .spin_vel_ff=0.0f, .spin_vel_fric=0.0f
 };
 #ifndef MOTION_HYBRID_DEFAULT
 #define MOTION_HYBRID_DEFAULT 0
 #endif
 
-typedef enum { POSITION, OPENLOOP, TORQUE, MANUAL, SPIN } motion_mode_t;
+typedef enum { POSITION, OPENLOOP, TORQUE, MANUAL, SPIN, HAPTIC } motion_mode_t;
 static volatile motion_state_t s_state;
 static motion_mode_t s_mode;
 static const char *s_fault = "";
@@ -59,14 +65,48 @@ static int s_spin_pct = SPIN_POWER_PCT_DEFAULT, s_spin_stopping, s_spin_timedout
 static int s_spin_openloop;
 static int8_t s_spin_dir = 1;
 static float s_spin_rps = 0.10f;
+static int32_t s_spin_vq, s_spin_vq_target, s_spin_vq_step, s_spin_vq_base;
+static int64_t s_spin_vel_cmd_q16, s_spin_vel_target_q16;
+static int64_t s_spin_vel_accel_step;
+static float s_spin_vel_filt, s_spin_vel_i;
+static int32_t s_spin_vel_target, s_spin_vel_feedback, s_spin_vel_error;
+static int32_t s_spin_vq_ramp_step;
+static int32_t s_spin_cur_div_saved;
+static int s_spin_cur_div_changed;
 static volatile uint32_t s_spin_last_host_tick;
 static uint32_t s_spin_stop_deadline, s_spin_zero_ticks;
+static volatile uint32_t s_haptic_last_host_tick;
+static int s_haptic_timedout;
+static int64_t s_haptic_pos;
+static uint16_t s_haptic_raw;
+static int s_haptic_filter_valid;
+
+static void finish(void);
 
 static float wrap(float a)
 {
   while (a < 0) a += TWO_PI_F;
   while (a >= TWO_PI_F) a -= TWO_PI_F;
   return a;
+}
+
+static void haptic_position_filter_step(void)
+{
+  uint16_t raw = foc_last_angle() & 0x3fffu;
+  if (!s_haptic_filter_valid)
+  {
+    s_haptic_raw = raw;
+    s_haptic_filter_valid = 1;
+    return;
+  }
+  int32_t d = (int32_t)raw - (int32_t)s_haptic_raw;
+  if (d > 8192) d -= RAW_TURN;
+  if (d < -8192) d += RAW_TURN;
+  // At 20 kHz, 4 raw/tick is about 30 rad/s. Reject larger one-tick jumps
+  // (MT6701/SPI transients) instead of feeding them into the haptic loop.
+  if (d > 4 || d < -4) d = 0;
+  s_haptic_pos += d;
+  s_haptic_raw = raw;
 }
 static float shortest(float a)
 {
@@ -120,7 +160,15 @@ static void release(void)
   s_hy_init = 0;
   s_vq = s_iacc = 0;
   s_integral = 0;
-  if (s_mode == SPIN) spin_restore_current_limits_locked();
+  s_spin_vq = s_spin_vq_target = s_spin_vq_base = 0;
+  s_spin_vel_cmd_q16 = s_spin_vel_target_q16 = 0;
+  s_spin_vel_filt = s_spin_vel_i = 0.0f;
+  s_spin_vel_target = s_spin_vel_feedback = s_spin_vel_error = 0;
+  if (s_spin_cur_div_changed) {
+    g_foc.cur_ref_div = s_spin_cur_div_saved;
+    s_spin_cur_div_changed = 0;
+  }
+  if (s_mode == SPIN || s_mode == HAPTIC) spin_restore_current_limits_locked();
 }
 static void abort_move(const char *why)
 {
@@ -171,6 +219,16 @@ void motion_init(void)
   s_spin_pct = SPIN_POWER_PCT_DEFAULT;
   s_spin_openloop = 0;
   s_spin_stopping = s_spin_timedout = 0;
+  s_spin_vel_cmd_q16 = s_spin_vel_target_q16 = 0;
+  s_spin_vel_filt = s_spin_vel_i = 0.0f;
+  s_spin_vel_target = s_spin_vel_feedback = s_spin_vel_error = 0;
+  s_spin_vq = s_spin_vq_target = s_spin_vq_base = 0;
+  s_spin_cur_div_saved = g_foc.cur_ref_div;
+  s_spin_cur_div_changed = 0;
+  s_haptic_last_host_tick = 0;
+  s_haptic_timedout = 0;
+  s_haptic_filter_valid = 0;
+  haptic_init();
   g_motion_cfg.vq_max = motion_vq_limit();
 }
 void motion_set_isr_rate(uint32_t hz)
@@ -292,6 +350,19 @@ int motion_spin_start_mode(int direction, float rps, int pct, int open_loop)
   s_spin_accel_step = (int64_t)SPIN_ACCEL_RAWPS2 * Q16 /
                       ((int64_t)s_hz * s_hz);
   if (s_spin_accel_step < 1) s_spin_accel_step = 1;
+  s_spin_vel_target_q16 = (int64_t)(rps * (float)RAW_TURN * (float)Q16);
+  if (s_spin_dir < 0) s_spin_vel_target_q16 = -s_spin_vel_target_q16;
+  s_spin_vel_cmd_q16 = 0;
+  s_spin_vel_accel_step = (int64_t)SPIN_ACCEL_RAWPS2 * Q16 / s_hz;
+  if (s_spin_vel_accel_step < 1) s_spin_vel_accel_step = 1;
+  s_spin_vel_filt = 0.0f;
+  s_spin_vel_i = 0.0f;
+  s_spin_vel_target = s_spin_vel_feedback = s_spin_vel_error = 0;
+  s_spin_vq = s_spin_vq_target = 0;
+  int32_t spin_cap = (int32_t)((int64_t)g_foc.v_limit_q * s_spin_pct / 100);
+  s_spin_vq_ramp_step = (int32_t)((float)spin_cap *
+                                  SPIN_VQ_RAMP_FULL_SCALE_PER_S / (float)s_hz);
+  if (s_spin_vq_ramp_step < 1) s_spin_vq_ramp_step = 1;
   s_inc = 0;
   s_cmd = 0;
   s_target = 0;
@@ -301,12 +372,55 @@ int motion_spin_start_mode(int direction, float rps, int pct, int open_loop)
   s_spin_stop_deadline = 0;
   g_motion_cfg.rev_per_s = rps;
   if (!begin(SPIN, 0)) goto done;
-  if (s_spin_openloop) {
+  // begin() performs a safety release, so commit the live velocity target
+  // only after the bridge is armed and the state transition is complete.
+  s_spin_vel_target_q16 = (int64_t)(rps * (float)RAW_TURN * (float)Q16);
+  if (s_spin_dir < 0) s_spin_vel_target_q16 = -s_spin_vel_target_q16;
+  s_spin_vel_cmd_q16 = 0;
+  s_spin_vel_accel_step = (int64_t)SPIN_ACCEL_RAWPS2 * Q16 / s_hz;
+  if (s_spin_vel_accel_step < 1) s_spin_vel_accel_step = 1;
+  s_spin_vel_filt = 0.0f;
+  s_spin_vel_i = 0.0f;
+  s_spin_vel_target = s_spin_vel_feedback = s_spin_vel_error = 0;
+  spin_cap = (int32_t)((int64_t)g_foc.v_limit_q * s_spin_pct / 100);
+  s_spin_vq_ramp_step = (int32_t)((float)spin_cap *
+                                  SPIN_VQ_RAMP_FULL_SCALE_PER_S / (float)s_hz);
+  if (s_spin_vq_ramp_step < 1) s_spin_vq_ramp_step = 1;
+  if (!s_spin_openloop) {
+    // Low-speed voltage FOC on a small geared knob has a narrow Coulomb
+    // friction band: encoder-angle commutation alone either sticks or jumps.
+    // Use the smooth open-loop electrical-angle schedule as the inner
+    // feed-forward, while the velocity PI trims voltage around the proven
+    // 20% synchronous baseline.
+    s_spin_vq_base = (int32_t)((int64_t)g_foc.v_limit_q *
+                               SPIN_OPENLOOP_POWER_PCT_MAX / 100);
+    if (s_spin_vq_base > spin_cap) s_spin_vq_base = spin_cap;
+    s_spin_vq = (int32_t)((int64_t)g_foc.v_limit_q * 10 / 100);
+    if (s_spin_vq > s_spin_vq_base) s_spin_vq = s_spin_vq_base;
+    s_angle = wrap(encoder_elec() - (float)(PI_F / 2.0f));
+    g_foc.comm_angle_e = s_angle;
+    g_foc.comm_override = 1;
+  } else {
     // Park the field on the rotor, as the finite open-loop sweep does, then
     // advance it from the encoder electrical zero. The current loop stays OFF.
     s_angle = wrap(encoder_elec() - (float)(PI_F / 2.0));
     g_foc.comm_angle_e = s_angle;
     g_foc.comm_override = 1;
+    s_spin_vq_target = cap_vq(INT32_MAX);
+    // Open-loop voltage has no current regulation. Start at 10% modulation
+    // and ramp to the requested force over 300 ms; this avoids the 70 ms
+    // startup current spike seen at 20% (about 1.5-1.7 k ADC LSB).
+    int32_t start_vq = (int32_t)((int64_t)g_foc.v_limit_q * 10 / 100);
+    s_spin_vq = start_vq < s_spin_vq_target ? start_vq : s_spin_vq_target;
+    int32_t ramp_ticks = (int32_t)(s_hz * 300u / 1000u);
+    if (ramp_ticks < 1) ramp_ticks = 1;
+    s_spin_vq_step = (s_spin_vq_target - s_spin_vq) / ramp_ticks;
+    if (s_spin_vq_step < 1) s_spin_vq_step = 1;
+  }
+  if (foc_current_loop_enabled() && !s_spin_openloop) {
+    s_spin_cur_div_saved = g_foc.cur_ref_div;
+    g_foc.cur_ref_div = 1;
+    s_spin_cur_div_changed = 1;
   }
   spin_apply_current_limits_locked();
   s_spin_last_host_tick = s_ticks;
@@ -327,6 +441,7 @@ void motion_spin_stop(void)
   if (s_state == MOTION_RUN && s_mode == SPIN && !s_spin_stopping) {
     s_spin_stopping = 1;
     s_spin_inc_target = 0;
+    s_spin_vel_target_q16 = 0;
     s_spin_zero_ticks = 0;
     s_spin_stop_deadline = s_ticks + (SPIN_STOP_TIMEOUT_MS * s_hz / 1000u);
   }
@@ -349,16 +464,28 @@ void motion_spin_set_speed(float rps)
   if (s_state == MOTION_RUN && s_mode == SPIN && !s_spin_stopping) {
     s_spin_inc_target = spin_inc_for(rps);
     if (s_spin_dir < 0) s_spin_inc_target = -s_spin_inc_target;
+    s_spin_vel_target_q16 = (int64_t)(rps * (float)RAW_TURN * (float)Q16);
+    if (s_spin_dir < 0) s_spin_vel_target_q16 = -s_spin_vel_target_q16;
   }
   control_unlock(key);
+}
+
+int motion_spin_power_cap(void)
+{
+  return s_spin_openloop ? SPIN_OPENLOOP_POWER_PCT_MAX : SPIN_POWER_PCT_MAX;
 }
 
 void motion_spin_set_power(int pct)
 {
   if (pct < 1) pct = 1;
-  if (pct > SPIN_POWER_PCT_MAX) pct = SPIN_POWER_PCT_MAX;
+  int cap = motion_spin_power_cap();
+  if (pct > cap) pct = cap;
   uint32_t key = control_lock();
   s_spin_pct = pct;
+  int32_t spin_cap = (int32_t)((int64_t)g_foc.v_limit_q * s_spin_pct / 100);
+  s_spin_vq_ramp_step = (int32_t)((float)spin_cap *
+                                  SPIN_VQ_RAMP_FULL_SCALE_PER_S / (float)s_hz);
+  if (s_spin_vq_ramp_step < 1) s_spin_vq_ramp_step = 1;
   if (s_state == MOTION_RUN && s_mode == SPIN) spin_apply_current_limits_locked();
   control_unlock(key);
 }
@@ -375,6 +502,115 @@ int motion_spin_stopping(void)
 
 int32_t motion_spin_pct(void) { return s_spin_pct; }
 float motion_spin_rps(void) { return s_spin_rps; }
+
+void motion_spin_set_velocity_gains(float kp, float ki, float ff, float friction)
+{
+  uint32_t key = control_lock();
+  if (isfinite(kp)) g_motion_cfg.spin_vel_kp = kp < 0.0f ? 0.0f : kp > 2.0f ? 2.0f : kp;
+  if (isfinite(ki)) g_motion_cfg.spin_vel_ki = ki < 0.0f ? 0.0f : ki > 40.0f ? 40.0f : ki;
+  if (isfinite(ff)) g_motion_cfg.spin_vel_ff = ff < 0.0f ? 0.0f : ff > 0.5f ? 0.5f : ff;
+  if (isfinite(friction))
+    g_motion_cfg.spin_vel_fric = friction < 0.0f ? 0.0f : friction > 1000.0f ? 1000.0f : friction;
+  control_unlock(key);
+}
+
+float motion_spin_vel_kp(void) { return g_motion_cfg.spin_vel_kp; }
+float motion_spin_vel_ki(void) { return g_motion_cfg.spin_vel_ki; }
+float motion_spin_vel_ff(void) { return g_motion_cfg.spin_vel_ff; }
+float motion_spin_vel_friction(void) { return g_motion_cfg.spin_vel_fric; }
+int32_t motion_spin_target_vel_rawps(void) { return s_spin_vel_target; }
+int32_t motion_spin_feedback_rawps(void) { return s_spin_vel_feedback; }
+int32_t motion_spin_vel_error_rawps(void) { return s_spin_vel_error; }
+
+int motion_haptic_start(int mode)
+{
+  uint32_t key = control_lock();
+  int ok = 0;
+  if (mode < HAPTIC_FREE || mode >= HAPTIC_MODE_COUNT) goto done;
+  if (s_state == MOTION_RUN && s_mode == HAPTIC)
+  {
+    haptic_mode_enter(mode, s_haptic_filter_valid ? s_haptic_pos : s_pos);
+    s_haptic_last_host_tick = s_ticks;
+    s_haptic_timedout = 0;
+    foc_current_limit_set(CURRENT_TRIP_LSB, motion_haptic_limit_q12());
+    ok = 1;
+    goto done;
+  }
+  if (s_state == MOTION_RUN || s_state == MOTION_FAULT ||
+      calibration_active() || !control_ready()) goto done;
+  if (!begin(HAPTIC, 0)) goto done;
+  s_haptic_pos = s_pos;
+  s_haptic_raw = foc_last_angle() & 0x3fffu;
+  s_haptic_filter_valid = 1;
+  haptic_mode_enter(mode, s_haptic_pos);
+  s_haptic_last_host_tick = s_ticks;
+  s_haptic_timedout = 0;
+  foc_current_limit_set(CURRENT_TRIP_LSB, motion_haptic_limit_q12());
+  ok = 1;
+done:
+  control_unlock(key);
+  return ok;
+}
+
+void motion_haptic_keepalive(void)
+{
+  if (s_state == MOTION_RUN && s_mode == HAPTIC)
+    s_haptic_last_host_tick = s_ticks;
+}
+
+int motion_haptic_active(void)
+{
+  return s_state == MOTION_RUN && s_mode == HAPTIC;
+}
+
+int motion_haptic_mode(void) { return g_haptic_cfg.mode; }
+
+int motion_haptic_timed_out(void)
+{
+  uint32_t key = control_lock();
+  int r = s_haptic_timedout;
+  s_haptic_timedout = 0;
+  control_unlock(key);
+  return r;
+}
+int motion_haptic_timeout_pending(void)
+{
+  return s_haptic_timedout;
+}
+
+void motion_haptic_set_center(void)
+{
+  uint32_t key = control_lock();
+  int use_filter = motion_haptic_active() && s_haptic_filter_valid;
+  haptic_set_center(use_filter ? s_haptic_pos : s_pos);
+  control_unlock(key);
+}
+
+void motion_haptic_config_changed(void)
+{
+  uint32_t key = control_lock();
+  int use_filter = motion_haptic_active() && s_haptic_filter_valid;
+  haptic_config_changed(use_filter ? s_haptic_pos : s_pos);
+  if (s_state == MOTION_RUN && s_mode == HAPTIC)
+    foc_current_limit_set(CURRENT_TRIP_LSB, motion_haptic_limit_q12());
+  control_unlock(key);
+}
+
+int32_t motion_haptic_limit_q12(void)
+{
+  int32_t hl = haptic_limit_q12();
+  int32_t ml = motion_vq_limit();
+  return hl < ml ? hl : ml;
+}
+
+float motion_haptic_angle_rad(void)
+{
+  int use_filter = motion_haptic_active() && s_haptic_filter_valid;
+  return haptic_relative_rad(use_filter ? s_haptic_pos : s_pos);
+}
+float motion_haptic_target_rad(void) { return haptic_target_rad(); }
+int32_t motion_haptic_position(void) { return haptic_detent_position(); }
+float motion_haptic_subpos(void) { return haptic_detent_subpos(); }
 
 int motion_spin_timed_out(void)
 {
@@ -464,6 +700,9 @@ static void update_position(void)
     if (dp < -max_dp) dp = -max_dp;
     s_vel_meas = (int32_t)(dp * s_hz / s_vel_win);
     s_vel += (s_vel_meas - s_vel) / 4;
+    float dt = (float)s_vel_win / (float)s_hz;
+    float alpha = dt / (SPIN_VEL_LPF_TAU_S + dt);
+    s_spin_vel_filt += alpha * ((float)s_vel_meas - s_spin_vel_filt);
     if (s_state == MOTION_RUN) {
       int32_t av = s_vel_meas < 0 ? -s_vel_meas : s_vel_meas;
       s_vib_sum += av;
@@ -494,6 +733,103 @@ static int hybrid_step(float advance)
   }
   g_foc.comm_angle_e = s_angle;
   g_foc.comm_override = 1;
+  return 1;
+}
+
+// Closed-loop SPIN uses the smooth open-loop electrical-angle schedule as an
+// inner feed-forward, while the encoder velocity PI trims voltage around the
+// proven 20% synchronous baseline. Direct encoder-angle commutation at these
+// low speeds has a stick/jump Coulomb-friction limit cycle; this hybrid keeps
+// the rotor moving continuously and still closes the outer velocity loop.
+static int spin_velocity_step(void)
+{
+  uint32_t host_limit = SPIN_TIMEOUT_MS * s_hz / 1000u;
+  if (!s_spin_stopping &&
+      (uint32_t)(s_ticks - s_spin_last_host_tick) > host_limit) {
+    s_spin_stopping = 1;
+    s_spin_vel_target_q16 = 0;
+    s_spin_zero_ticks = 0;
+    s_spin_stop_deadline = s_ticks + (SPIN_STOP_TIMEOUT_MS * s_hz / 1000u);
+    s_spin_timedout = 1;
+  }
+
+  int64_t rate = s_spin_stopping ? 0 : s_spin_vel_target_q16;
+  if (s_spin_vel_cmd_q16 < rate) {
+    s_spin_vel_cmd_q16 += s_spin_vel_accel_step;
+    if (s_spin_vel_cmd_q16 > rate) s_spin_vel_cmd_q16 = rate;
+  } else if (s_spin_vel_cmd_q16 > rate) {
+    s_spin_vel_cmd_q16 -= s_spin_vel_accel_step;
+    if (s_spin_vel_cmd_q16 < rate) s_spin_vel_cmd_q16 = rate;
+  }
+
+  s_spin_vel_target = (int32_t)(s_spin_vel_cmd_q16 / Q16);
+  s_spin_vel_feedback = (int32_t)lrintf(s_spin_vel_filt);
+  s_spin_vel_error = s_spin_vel_target - s_spin_vel_feedback;
+
+  int32_t cap = cap_vq(INT32_MAX);
+  float base_f = (float)s_spin_vq_base +
+                 g_motion_cfg.spin_vel_ff * (float)s_spin_vel_target;
+  if (s_spin_vel_target > 0) base_f += g_motion_cfg.spin_vel_fric;
+  else if (s_spin_vel_target < 0) base_f -= g_motion_cfg.spin_vel_fric;
+  if (base_f < 0.0f) base_f = 0.0f;
+  int32_t base = (int32_t)lrintf(base_f);
+  if (base > cap) base = cap;
+  float err = (float)s_spin_vel_error;
+  float u = 0.0f;
+  if (!s_spin_stopping || s_spin_vel_cmd_q16 != 0) {
+    // Advance the voltage vector at the commanded mechanical speed. Positive
+    // direction follows the calibrated sensor sign, exactly like open-loop.
+    float elec_inc = ((float)s_spin_vel_target / (float)RAW_TURN) *
+                     TWO_PI_F * (float)g_foc.pole_pairs *
+                     (float)g_foc.sensor_direction / (float)s_hz;
+    s_angle = wrap(s_angle + elec_inc);
+    g_foc.comm_angle_e = s_angle;
+    g_foc.comm_override = 1;
+
+    float integral = s_spin_vel_i +
+                     g_motion_cfg.spin_vel_ki * err / (float)s_hz;
+    float int_lo = -(float)base;
+    float int_hi = (float)(cap - base);
+    if (integral > int_hi) integral = int_hi;
+    if (integral < int_lo) integral = int_lo;
+    float trim = g_motion_cfg.spin_vel_kp * err + integral;
+    float candidate = (float)base + trim;
+    if ((candidate > (float)cap && err > 0.0f) ||
+        (candidate < 0.0f && err < 0.0f)) {
+      // Conditional integration against the voltage floor/ceiling.
+    } else {
+      s_spin_vel_i = integral;
+    }
+    u = (float)base + g_motion_cfg.spin_vel_kp * err + s_spin_vel_i;
+  }
+  if (u > (float)cap) u = (float)cap;
+  if (u < 0.0f) u = 0.0f;
+  int32_t target = (int32_t)lrintf(u);
+  if (target > s_spin_vq + s_spin_vq_ramp_step)
+    target = s_spin_vq + s_spin_vq_ramp_step;
+  else if (target < s_spin_vq - s_spin_vq_ramp_step)
+    target = s_spin_vq - s_spin_vq_ramp_step;
+  if (target > cap) target = cap;
+  if (target < 0) target = 0;
+  s_spin_vq = target;
+  s_vq = s_spin_vq;
+
+  if (s_spin_stopping && s_spin_vel_cmd_q16 == 0) {
+    g_foc.comm_override = 1;
+    int32_t av = s_spin_vel_feedback < 0 ? -s_spin_vel_feedback : s_spin_vel_feedback;
+    if (av <= SPIN_STOP_VEL_RAWPS) {
+      if (++s_spin_zero_ticks >= s_hz / 10u) { finish(); return 0; }
+    } else {
+      s_spin_zero_ticks = 0;
+    }
+    if (s_spin_stop_deadline &&
+        (int32_t)(s_ticks - s_spin_stop_deadline) >= 0) {
+      finish();
+      return 0;
+    }
+  } else {
+    s_spin_zero_ticks = 0;
+  }
   return 1;
 }
 static uint64_t abs64u(int64_t v)
@@ -543,6 +879,22 @@ void motion_step_isr(void)
   if (s_state != MOTION_RUN) { g_foc.torque_q = 0; return; }
   ++s_ticks;
   if (foc_crc_errors() - s_crc0 > 200u) { abort_move("crc storm"); return; }
+  if (s_mode == HAPTIC)
+  {
+    haptic_position_filter_step();
+    uint32_t host_limit = HAPTIC_TIMEOUT_MS * s_hz / 1000u;
+    if ((uint32_t)(s_ticks - s_haptic_last_host_tick) > host_limit)
+    {
+      s_haptic_timedout = 1;
+      release();
+      s_state = MOTION_IDLE;
+      return;
+    }
+    s_vq = haptic_compute_q12(s_haptic_pos, s_vel, 1.0f / (float)s_hz,
+                              motion_haptic_limit_q12());
+    g_foc.torque_q = s_vq;
+    return;
+  }
   if (s_mode != POSITION && s_mode != SPIN && s_ticks >= s_duration) {
     if (s_mode == MANUAL) s_man_timedout = 1;
     finish();
@@ -553,6 +905,11 @@ void motion_step_isr(void)
     int32_t lo = PWM3PH_ARR * (100 - s_man_pct) / 200;
     pwm3ph_set(s_man_mask & 1 ? hi : lo, s_man_mask & 2 ? hi : lo,
                s_man_mask & 4 ? hi : lo);
+    return;
+  }
+  if (s_mode == SPIN && !s_spin_openloop) {
+    if (!spin_velocity_step()) return;
+    g_foc.torque_q = s_vq;
     return;
   }
   if (s_mode == OPENLOOP) {
@@ -586,7 +943,15 @@ void motion_step_isr(void)
                    (float)g_foc.sensor_direction);
     g_foc.comm_angle_e = s_angle;
     g_foc.comm_override = 1;
-    s_vq = cap_vq(INT32_MAX);
+    s_spin_vq_target = cap_vq(INT32_MAX);
+    if (s_spin_vq < s_spin_vq_target) {
+      s_spin_vq += s_spin_vq_step;
+      if (s_spin_vq > s_spin_vq_target) s_spin_vq = s_spin_vq_target;
+    } else if (s_spin_vq > s_spin_vq_target) {
+      s_spin_vq -= s_spin_vq_step;
+      if (s_spin_vq < s_spin_vq_target) s_spin_vq = s_spin_vq_target;
+    }
+    s_vq = s_spin_vq;
     if (s_spin_stopping && s_inc == 0) { finish(); return; }
     if (s_spin_stop_deadline &&
         (int32_t)(s_ticks - s_spin_stop_deadline) >= 0) {

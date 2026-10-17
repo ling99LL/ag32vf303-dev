@@ -124,11 +124,12 @@ void pwm3ph_set(int32_t ccr_a, int32_t ccr_b, int32_t ccr_c)
 static void pwm3ph_update_irq(void)
 {
   GPTIMER_ClearFlagUpdate(GPTIMER0);
-  // P1-3 valley gate: at the underflow (valley) event CNT has just wrapped to
-  // ~0 and counts up; at the overflow (peak) event CNT sits at ARR counting
-  // down. Only the valley has all low-side switches on (valid current sense)
-  // and starts a fresh PWM period.
-  if (GPTIMER0->CNT > (PWM3PH_ARR >> 1)) {
+  // P1-3 edge gate: PWM mode 1 is active-high while CNT < CCR.  At the
+  // underflow (valley) the INHx outputs are high (high-side on), so the
+  // low-side shunt/CSA is not valid.  At the overflow (peak) INHx is low
+  // (low-side on), which is the current-sense sampling point.  Process only
+  // that edge; the counter is near ARR and counts down.
+  if (GPTIMER0->CNT <= (PWM3PH_ARR >> 1)) {
     return;
   }
   if (s_update_isr) {

@@ -12,5 +12,8 @@ int calibration_active(void);
 int calibration_stage(void);
 uint32_t calibration_peak(void);
 #define CALIBRATION_PCT 5
-#define CURRENT_TRIP_LSB 200
+// 1 LSB is about 1.34 mA at the DRV8316C 0.6 V/A gain.  200 LSB (~269 mA)
+// tripped normal 5% calibration and detent-mode current; 1800 LSB (~2.4 A)
+// is just below the motor's 2.5 A rating and still catches gross faults.
+#define CURRENT_TRIP_LSB 1800
 #endif

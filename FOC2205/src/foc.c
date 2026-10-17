@@ -246,7 +246,9 @@ int foc_align_sensor(void)
 // then inverse Park + Clarke + SVPWM injection produce the three duties.
 void foc_step_isr(void)
 {
-  // 1. valley-synchronous current sampling. Full rate whenever the bridge is
+  // 1. low-side-synchronous current sampling.  The PWM update ISR is gated to
+  //    the peak (INHx low) edge where the low-side shunts are valid. Full rate
+  //    whenever the bridge is
   //    armed: the current-loop PI and the N-consecutive OC discriminator both
   //    consume every PWM update. Idle stays at 1/16 rate (P2-3).
   int armed = pwm3ph_enabled();
