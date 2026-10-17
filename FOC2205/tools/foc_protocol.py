@@ -159,7 +159,7 @@ class Telemetry:
         if not line.startswith('$T,3,'):
             return None
         parts = line.split(',')
-        if len(parts) not in (12, 13) or parts[1] != '3':
+        if len(parts) not in (12, 13, 17) or parts[1] != '3':
             return None
         try:
             values = {
@@ -175,8 +175,13 @@ class Telemetry:
                 'out': int(parts[10]),
                 'hz': int(parts[11]),
             }
-            if len(parts) == 13:
+            if len(parts) >= 13:
                 values['raw'] = int(parts[12])
+            if len(parts) == 17:
+                values['ia'] = int(parts[13])
+                values['ib'] = int(parts[14])
+                values['ic'] = int(parts[15])
+                values['adcok'] = int(parts[16])
         except ValueError:
             return None
         if values['hm'] not in HAPTIC_MODE_NAMES:
@@ -187,6 +192,11 @@ class Telemetry:
             return None
         if 'raw' in values and not 0 <= values['raw'] < 16384:
             return None
+        if 'adcok' in values:
+            if values['adcok'] not in (0, 1):
+                return None
+            if any(not -32768 <= values[key] <= 32767 for key in ('ia', 'ib', 'ic')):
+                return None
         return cls(values)
 
     def __getitem__(self, key):

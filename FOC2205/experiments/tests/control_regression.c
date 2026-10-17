@@ -171,6 +171,20 @@ static void test_spin_closedloop_velocity_mode(void)
   assert(!motion_spin_active() && !g_foc.comm_override && !g_foc.torque_q);
   puts("PASS closed-loop SPIN velocity PI / synchronous feed-forward / release");
 }
+static void test_spin_rpm_and_estop_parser(void)
+{
+  reset();
+  rx = "rpm 45\n";
+  console_poll(1);
+  assert(fabsf(motion_spin_rps() - 0.75f) < 0.001f);
+  assert(motion_spin_start_mode(1, motion_spin_rps(), 20, 0));
+  tick(2);
+  assert(motion_spin_active() && enabled);
+  rx = "estop\n";
+  console_poll(2);
+  assert(motion_state() == MOTION_IDLE && !enabled && !g_foc.torque_q);
+  puts("PASS continuous rpm command / immediate emergency-stop parser");
+}
 static void test_faults_and_restarts(void)
 {
   reset(); motion_manual_start(1,100); assert(enabled && motion_manual_pct()<=20);
@@ -353,6 +367,7 @@ int main(void)
   test_encoder_field_debounce();
   test_spin_openloop_mode();
   test_spin_closedloop_velocity_mode();
+  test_spin_rpm_and_estop_parser();
   test_overcurrent_telemetry();
   test_openloop_and_long_time(); test_console_and_blockage();
   test_long_trajectory();

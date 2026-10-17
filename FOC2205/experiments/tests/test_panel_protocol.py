@@ -77,9 +77,32 @@ class ProtocolTests(unittest.TestCase):
         tele_raw=Telemetry.parse('$T,3,1,1234,-500,321,1500,0,0,1,1,20000,12345')
         self.assertIsNotNone(tele_raw)
         self.assertEqual(tele_raw['raw'],12345)
+        tele_current=Telemetry.parse(
+            '$T,3,1,1234,-500,321,1500,0,0,1,1,20000,12345,101,-202,303,1')
+        self.assertIsNotNone(tele_current)
+        self.assertEqual((tele_current['ia'], tele_current['ib'], tele_current['ic']),
+                         (101, -202, 303))
+        self.assertEqual(tele_current['adcok'], 1)
         self.assertIsNone(Telemetry.parse('$T,2,1,1234,-500,321,1500,0,0,1,1,20000'))
         self.assertIsNone(Telemetry.parse('$T,3,9,0,0,0,0,0,0,1,1,20000'))
         self.assertIsNone(Telemetry.parse('$T,3,1,1234,-500,321,1500,0,0,1,1,20000,16384'))
+        self.assertIsNone(Telemetry.parse(
+            '$T,3,1,1234,-500,321,1500,0,0,1,1,20000,12345,101,-202,303'))
+        self.assertIsNone(Telemetry.parse(
+            '$T,3,1,1234,-500,321,1500,0,0,1,1,20000,12345,101,-202,303,2'))
+
+    def test_emergency_stop_is_always_sent(self):
+        app=App.__new__(App)
+        sent=[]
+        app.ser=SimpleNamespace(write=sent.append)
+        app.model=PanelState()
+        app._log=lambda text: None
+        app.command_pending_until=99.0
+        app.spin_stop_at=88.0
+        app.spin_status=SimpleNamespace(set=lambda text: None)
+        app._emergency_stop()
+        self.assertEqual(sent, [b'estop\n'])
+        self.assertEqual(app.command_pending_until, 0.0)
 
     def test_missing_corrupt_old_frame_rejected(self):
         self.assertIsNone(Status.parse('#FOC,proto=3,ang=0'))

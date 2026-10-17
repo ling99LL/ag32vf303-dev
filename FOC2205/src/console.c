@@ -69,6 +69,7 @@ static void console_help(void)
   printf("p / P : endless SPIN forward / reverse; s ramps down and releases\n");
   printf("#0/#1 : SPIN closed-loop / open-loop mode (set before p/P; 'l' controls current loop)\n");
   printf("V1-4  : SPIN speed 0.05/0.10/0.25/1.00 rev/s  W1-8 : SPIN force 10-80%%\n");
+  printf("rpm <3-60> : set SPIN speed continuously (rpm); estop : immediate release\n");
   printf("vp vi vff vfr : closed-loop SPIN velocity PI / feed-forward / friction\n");
   printf("s     : release torque (stop)\n");
   printf("+ / - : modulation limit x1.25 / x0.75 (capped)\n");
@@ -186,7 +187,7 @@ static void print_status_frame(void)
   foc_oc_get(&oc);
   printf("#FOC,proto=3,ang=%d,deg=%u.%u,crc=%u,ia=%d,ib=%d,ic=%d,mode=%d,mask=%u,pct=%d,"
          "drv=0x%02x,vq=%ld,iacc=%ld,err=%ld,vel=%ld,st=%d,hyb=%d,slip=%ld,"
-         "diag=1,fw=20261017.24,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
+         "diag=1,fw=20261017.25,up=%u,hz=%u,stage=%u,calst=%d,calpk=%u,calok=%d,ready=%d,aligned=%d,"
          "drvok=%d,encok=%d,mg=%u,adcok=%d,cal=%d,adce=%u,brk=%d,out=%d,"
          "cl=%d,open=%d,vsp=%ld,vfb=%ld,verr=%ld,vkp=%d,vki=%d,vff=%d,vfr=%d,"
          "id=%d,iq=%d,iref=%ld,ipa=%d,ipb=%d,ipc=%d,ocn=%u,ocmx=%u,ocg=%u,"
@@ -671,6 +672,12 @@ static int console_line_command(const char *line)
                line[n - 1] == '\r')) --n;
   if (!n) return 0;
 
+  if (!strcmp(line, "estop")) {
+    motion_stop();
+    printf("EMERGENCY STOP: power stage released immediately\n");
+    return 1;
+  }
+
   if (n == 2 && (line[0] == 'm' || line[0] == 'M') &&
       line[1] >= '0' && line[1] <= '4') {
     int mode = line[1] - '0';
@@ -721,6 +728,16 @@ static int console_line_command(const char *line)
                (int)(val * 1000.0f), (int)(rps * 1000.0f), (int)vq);
       else
         printf("rot refused (state=%d)\n", (int)motion_state());
+      return 1;
+    }
+    if (!strcmp(cmd, "rpm")) {
+      if (val < 3.0f || val > 60.0f) {
+        printf("rpm refused: use 3..60\n");
+        return 1;
+      }
+      motion_spin_set_speed(val / 60.0f);
+      printf("SPIN speed=%d rpm (%.4f rev/s)\n",
+             (int)(val + 0.5f), val / 60.0f);
       return 1;
     }
     if (console_set_spin_velocity_param(cmd, val) ||
@@ -815,6 +832,8 @@ static void console_dispatch_legacy_sequence(const char *t, int n)
 static void telemetry_emit(void)
 {
   int hm = motion_haptic_active() ? motion_haptic_mode() : 0;
+  int16_t ia = 0, ib = 0, ic = 0;
+  foc_last_currents(&ia, &ib, &ic);
   long ang = (long)(motion_haptic_angle_rad() * 18000.0f / 3.14159265359f);
   long vel = (long)((int64_t)motion_vel_rawps() * 6283 / 16384);
   long tq = (long)motion_cmd_q12();
@@ -822,9 +841,10 @@ static void telemetry_emit(void)
   long pos = hm == 3 ? (long)motion_haptic_position() : 0;
   long sub = hm == 3 ? (long)(motion_haptic_subpos() * 100.0f) : 0;
   int raw = (int)(foc_last_angle() & 0x3fffu);
-  printf("$T,3,%d,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d,%u,%d\n",
+  printf("$T,3,%d,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d,%u,%d,%d,%d,%d,%d\n",
          hm, ang, vel, tq, tgt, pos, sub,
-         (int)motion_state(), pwm3ph_enabled(), (unsigned)s_isr_hz_g, raw);
+         (int)motion_state(), pwm3ph_enabled(), (unsigned)s_isr_hz_g, raw,
+         (int)ia, (int)ib, (int)ic, foc_current_valid() ? 1 : 0);
 }
 
 void console_telemetry_poll(uint32_t now_ms)
@@ -881,6 +901,7 @@ static void console_process_token(void)
   s_linelen = 0;
 
   if (console_line_command(token)) {
+    motion_spin_keepalive();
     motion_haptic_keepalive();
     return;
   }

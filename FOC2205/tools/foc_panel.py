@@ -17,8 +17,7 @@ from foc_protocol import PanelState, Status, Telemetry, STATE_NAMES, HAPTIC_MODE
 POLL_MS = 100
 ENCODER_DISPLAY_DIRECTION = -1  # physical magnet/knob orientation on this board
 LOG_DIR = Path(__file__).resolve().parents[1] / 'experiments' / 'logs'
-SPIN_SPEEDS = ('0.05 圈/秒 (3 rpm)', '0.10 圈/秒 (6 rpm)',
-               '0.25 圈/秒 (15 rpm)', '1.00 圈/秒 (60 rpm)')
+SPIN_SPEED_PRESETS = (3, 6, 15, 60)
 SPIN_OPENLOOP_POWER_MAX = 20
 SPIN_VEL_KP_DEFAULT = 0.010
 SPIN_VEL_KI_DEFAULT = 0.050
@@ -40,10 +39,6 @@ HAPTIC_PARAMS = [
     ('kf', 'm4 区轻阻尼 kf', 0.0, 0.5, 0.005, 0.02, '{:.3f}', 'kf {:.3f}'),
     ('vl', '力度上限 vl(%)', 5.0, 25.0, 1.0, 20.0, '{:.0f}', 'vl {:.0f}'),
 ]
-SPIN_SPEED_INFO = {text: (index + 1, rps) for index, (text, rps) in enumerate(zip(
-    SPIN_SPEEDS, (0.05, 0.10, 0.25, 1.00)))}
-
-
 def list_ports():
     return sorted(p.device for p in serial.tools.list_ports.comports())
 
@@ -82,7 +77,7 @@ class App:
         self._clear_values()
         self._enable_controls()
         root.protocol('WM_DELETE_WINDOW', self._close)
-        root.bind('<Escape>', lambda event: self._send('s'))
+        root.bind('<Escape>', lambda event: self._emergency_stop())
         self.timer = root.after(POLL_MS, self._tick)
 
     def _build_ui(self):
@@ -92,6 +87,12 @@ class App:
         style.configure('TLabelframe.Label', font=('Microsoft YaHei UI', 10, 'bold'))
         top = ttk.Frame(self.root, padding=10)
         top.pack(fill='x')
+        self.btn_stop = tk.Button(
+            self.root, text='紧急停止 · 立即释放功率级  [Esc]',
+            font=('Microsoft YaHei UI', 12, 'bold'), bg='#ba2836', fg='white',
+            activebackground='#8f1725', activeforeground='white',
+            command=self._emergency_stop, height=2)
+        self.btn_stop.pack(fill='x', padx=10, pady=(0, 8))
         ttk.Label(top, text='串口 115200 / 8N1').pack(side='left')
         ports = list_ports()
         self.port = ttk.Combobox(top, width=12, values=ports)
@@ -108,9 +109,6 @@ class App:
                               values=['关闭', '10 Hz', '20 Hz', '50 Hz', '100 Hz'])
         tel_cb.pack(side='left')
         tel_cb.bind('<<ComboboxSelected>>', self._telemetry_changed)
-        self.btn_stop = tk.Button(top, text='释放输出  [Esc]', font=('Microsoft YaHei UI', 11, 'bold'),
-                                  bg='#ba2836', fg='white', command=lambda: self._send('s'))
-        self.btn_stop.pack(side='right')
         self.banner = tk.Label(self.root, text='连接设备后读取健康状态', anchor='w',
                                bg='#e8edf4', fg='#28374d', padx=14, pady=10,
                                font=('Microsoft YaHei UI', 12, 'bold'))
@@ -121,22 +119,68 @@ class App:
         haptic_tab = ttk.Frame(self.notebook)
         self.notebook.add(status_tab, text='设备与动作')
         self.notebook.add(haptic_tab, text='力反馈手感')
-        body = ttk.Frame(status_tab, padding=10)
+        status_shell = ttk.Frame(status_tab)
+        status_shell.pack(fill='both', expand=True)
+        self.status_canvas = tk.Canvas(status_shell, highlightthickness=0)
+        status_scroll = ttk.Scrollbar(status_shell, orient='vertical',
+                                      command=self.status_canvas.yview)
+        self.status_canvas.configure(yscrollcommand=status_scroll.set)
+        self.status_canvas.pack(side='left', fill='both', expand=True)
+        status_scroll.pack(side='right', fill='y')
+        status_body = ttk.Frame(self.status_canvas)
+        status_window = self.status_canvas.create_window(
+            (0, 0), window=status_body, anchor='nw')
+        status_body.bind(
+            '<Configure>',
+            lambda event: self.status_canvas.configure(
+                scrollregion=self.status_canvas.bbox('all')))
+        self.status_canvas.bind(
+            '<Configure>',
+            lambda event: self.status_canvas.itemconfigure(
+                status_window, width=event.width))
+        self.status_canvas.bind(
+            '<Enter>',
+            lambda event: self.status_canvas.bind_all(
+                '<MouseWheel>',
+                lambda wheel: self.status_canvas.yview_scroll(
+                    -int(wheel.delta / 120), 'units')))
+        self.status_canvas.bind(
+            '<Leave>',
+            lambda event: self.status_canvas.unbind_all('<MouseWheel>'))
+        body = ttk.Frame(status_body, padding=10)
         body.pack(fill='x')
         left = ttk.LabelFrame(body, text='MT6701 编码器', padding=10)
         left.pack(side='left', fill='y', padx=(0, 10))
-        self.canvas = tk.Canvas(left, width=240, height=240, bg='#172337', highlightthickness=0)
+        self.canvas = tk.Canvas(left, width=220, height=220, bg='#172337', highlightthickness=0)
         self.canvas.pack()
-        cx = cy = 120
+        cx = cy = 110
         for i in range(12):
             a = math.radians(i * 30 - 90)
-            self.canvas.create_line(cx+93*math.cos(a), cy+93*math.sin(a),
-                                    cx+106*math.cos(a), cy+106*math.sin(a), fill='#8092ac', width=2)
-        for deg, x, y in [(0,120,33), (90,207,120), (180,120,207), (270,33,120)]:
+            self.canvas.create_line(cx+85*math.cos(a), cy+85*math.sin(a),
+                                    cx+98*math.cos(a), cy+98*math.sin(a), fill='#8092ac', width=2)
+        for deg, x, y in [(0,110,30), (90,192,110), (180,110,190), (270,28,110)]:
             self.canvas.create_text(x, y, text=str(deg), fill='#c4d0e0')
-        self.needle = self.canvas.create_line(120,120,120,38,fill='#44d7b6',width=4, state='hidden')
+        self.needle = self.canvas.create_line(110,110,110,35,fill='#44d7b6',width=4, state='hidden')
         self.angle_text = tk.StringVar(value='--.-°')
-        ttk.Label(left, textvariable=self.angle_text, font=('Consolas', 28, 'bold')).pack(pady=6)
+        ttk.Label(left, textvariable=self.angle_text, font=('Consolas', 26, 'bold')).pack(pady=2)
+        current_title = ttk.Frame(left)
+        current_title.pack(fill='x', pady=(0, 2))
+        ttk.Label(current_title, text='三相电流', font=('Microsoft YaHei UI', 9, 'bold')).pack(side='left')
+        ttk.Label(current_title, text='ADC LSB', foreground='#5a6474',
+                  font=('Microsoft YaHei UI', 8)).pack(side='right')
+        current_row = ttk.Frame(left)
+        current_row.pack(fill='x', pady=(0, 5))
+        self.current_vars = {}
+        for index, (name, color) in enumerate((('A', '#d95f69'), ('B', '#3b82b8'),
+                                               ('C', '#d58a2f'))):
+            box = ttk.Frame(current_row)
+            box.pack(side='left', expand=True, fill='x', padx=(0 if index == 0 else 5, 0))
+            ttk.Label(box, text=name, foreground=color,
+                      font=('Consolas', 10, 'bold')).pack(side='left')
+            value = tk.StringVar(value='---')
+            self.current_vars[name] = value
+            ttk.Label(box, textvariable=value, anchor='e',
+                      font=('Consolas', 15, 'bold')).pack(side='right', fill='x', expand=True)
         self.encoder_text = tk.StringVar(value='等待有效采样')
         ttk.Label(left, textvariable=self.encoder_text).pack()
         self.turns_text = tk.StringVar(value='相对累计  +0.000 圈')
@@ -193,13 +237,28 @@ class App:
                                   command=self._spin_mode_changed)
             btn.pack(side='left', padx=(0,8))
             self.spin_mode_buttons.append(btn)
-        ttk.Label(row, text='速度').pack(side='left', padx=(12,6))
-        self.spin_speed = tk.StringVar(value='0.10 圈/秒 (6 rpm)')
-        self.spin_speed_box = ttk.Combobox(
-            row, width=20, state='readonly', textvariable=self.spin_speed,
-            values=SPIN_SPEEDS)
-        self.spin_speed_box.pack(side='left')
-        self.spin_speed_box.bind('<<ComboboxSelected>>', self._spin_speed_changed)
+        speed_row = ttk.Frame(spin)
+        speed_row.pack(fill='x', pady=(7, 0))
+        ttk.Label(speed_row, text='速度').pack(side='left', padx=(0,6))
+        self.spin_speed_rpm = tk.IntVar(value=6)
+        self.spin_speed_text = tk.StringVar(value='6 rpm')
+        self.spin_speed_scale = tk.Scale(
+            speed_row, from_=3, to=60, resolution=1, orient='horizontal', length=200,
+            showvalue=False, variable=self.spin_speed_rpm,
+            command=self._spin_speed_changed, font=('Microsoft YaHei UI', 9))
+        self.spin_speed_scale.pack(side='left')
+        self.spin_speed_scale.bind(
+            '<ButtonRelease-1>', lambda event: self._apply_spin_speed())
+        self.spin_speed_scale.bind(
+            '<KeyRelease>', lambda event: self._apply_spin_speed())
+        ttk.Label(speed_row, textvariable=self.spin_speed_text, width=7,
+                  font=('Consolas', 10, 'bold')).pack(side='left', padx=(5, 8))
+        self.spin_speed_preset_buttons = []
+        for rpm in SPIN_SPEED_PRESETS:
+            btn = ttk.Button(speed_row, text=str(rpm), width=3,
+                             command=lambda value=rpm: self._set_spin_speed_preset(value))
+            btn.pack(side='left', padx=1)
+            self.spin_speed_preset_buttons.append(btn)
         row = ttk.Frame(spin)
         row.pack(fill='x', pady=(8,0))
         ttk.Label(row, text='力度上限').pack(side='left', padx=(0,6))
@@ -228,8 +287,8 @@ class App:
                 ('I', self.spin_vi, 0.0, 2.0, 0.005),
                 ('前馈', self.spin_vff, 0.0, 0.2, 0.005),
                 ('摩擦', self.spin_vfr, 0.0, 500.0, 10.0)):
-            ttk.Label(vel_row, text=label).pack(side='left', padx=(6,2))
-            box = ttk.Spinbox(vel_row, width=7, from_=lo, to=hi, increment=inc,
+            ttk.Label(vel_row, text=label).pack(side='left', padx=(4,1))
+            box = ttk.Spinbox(vel_row, width=6, from_=lo, to=hi, increment=inc,
                               textvariable=var, format='%.3f')
             box.pack(side='left')
             self.spin_vel_controls.append(box)
@@ -473,9 +532,9 @@ class App:
             allowed = self.model.can_drive(now)
         elif cmd[:1] in ('V', 'W', '#'):
             allowed = self.model.can_spin_control(now)
-        elif cmd.startswith(('vp ', 'vi ', 'vff ', 'vfr ')):
+        elif cmd.startswith(('vp ', 'vi ', 'vff ', 'vfr ', 'rpm ')):
             allowed = self.model.can_spin_control(now)
-        elif cmd.startswith('tel ') or cmd in ('s','?','f','d','h'):
+        elif cmd.startswith('tel ') or cmd in ('s','?','f','d','h','estop'):
             allowed = True
         elif (cmd in {f'm{i}' for i in range(5)} or cmd == 'cd' or
               word in haptic_params or word == 'rot'):
@@ -502,10 +561,16 @@ class App:
             self.tel_requested = True
         if (cmd in ('a','A','m','r','R','z','p','P','cd') or
                 cmd in {f'm{i}' for i in range(5)} or
-                cmd.startswith(('x','w','V','W','#','rot ','vp ','vi ','vff ','vfr ')) or
+                cmd.startswith(('x','w','V','W','#','rot ','vp ','vi ','vff ','vfr ','rpm ')) or
                 word in haptic_params):
             self.command_pending_until = now + 0.3
         return True
+
+    def _emergency_stop(self):
+        self.command_pending_until = 0.0
+        self.spin_stop_at = 0.0
+        self.spin_status.set('紧急停止：等待功率级释放确认')
+        self._send('estop\n')
 
     def _toggle_manual(self):
         if self.model.can_manual(time.monotonic()):
@@ -525,14 +590,23 @@ class App:
         if self.model.can_manual(time.monotonic()):
             self._send('w%d' % (self.pct.get()//5))
 
-    def _spin_speed_gear(self):
-        return SPIN_SPEED_INFO.get(self.spin_speed.get(), (2, 0.10))
-
     def _spin_speed_changed(self, event=None):
-        gear, rps = self._spin_speed_gear()
+        rpm = max(3, min(60, int(round(float(self.spin_speed_rpm.get())))))
+        self.spin_speed_text.set(f'{rpm} rpm')
+        if not self.model.spin_active(time.monotonic()):
+            self.spin_status.set(f'速度设定 {rpm} rpm ({rpm/60.0:.3f} 圈/秒)')
+
+    def _set_spin_speed_preset(self, rpm):
+        self.spin_speed_rpm.set(rpm)
+        self._spin_speed_changed()
+        self._apply_spin_speed()
+
+    def _apply_spin_speed(self):
+        rpm = max(3, min(60, int(round(float(self.spin_speed_rpm.get())))))
+        self.spin_speed_rpm.set(rpm)
+        self.spin_speed_text.set(f'{rpm} rpm')
         if self.model.spin_active(time.monotonic()):
-            self._send('V%d\n' % gear)
-        self.spin_status.set(f'速度设定 {rps:.2f} 圈/秒 ({rps*60:.0f} rpm)')
+            self._send(f'rpm {rpm}\n')
 
     def _apply_spin_velocity(self):
         for name, var in (('vp', self.spin_vp), ('vi', self.spin_vi),
@@ -571,14 +645,15 @@ class App:
         if not self.model.can_drive(now):
             self._log('设备未就绪，未启动无限旋转')
             return
-        gear, rps = self._spin_speed_gear()
+        rpm = max(3, min(60, int(round(float(self.spin_speed_rpm.get())))))
+        rps = rpm / 60.0
         cap = SPIN_OPENLOOP_POWER_MAX if self.spin_mode.get() == 'open' else 80
         pct = max(10, min(cap, int(round(self.spin_power.get() / 10.0)) * 10))
         self.spin_power.set(pct)
         mode = 1 if self.spin_mode.get() == 'open' else 0
         self._send('#%d\n' % mode)
         time.sleep(0.02)
-        self._send('V%d\n' % gear)
+        self._send('rpm %d\n' % rpm)
         time.sleep(0.02)
         self._send('W%d\n' % (pct // 10))
         time.sleep(0.02)
@@ -586,7 +661,7 @@ class App:
             self._apply_spin_velocity()
         self._send('p\n' if self.spin_dir.get() > 0 else 'P\n')
         self.spin_stop_at = 0
-        self.spin_status.set(f"启动中：{'开环' if mode else '闭环'} {rps:.2f} 圈/秒，力度上限 {pct}%")
+        self.spin_status.set(f"启动中：{'开环' if mode else '闭环'} {rpm} rpm，力度上限 {pct}%")
 
     def _enable_controls(self):
         now = time.monotonic()
@@ -607,8 +682,11 @@ class App:
             button.configure(state='normal' if ready and not pending else 'disabled')
         for button in self.spin_mode_buttons:
             button.configure(state='normal' if ready and not spin and not pending else 'disabled')
-        self.spin_speed_box.configure(
-            state='readonly' if (ready or spin) and not pending else 'disabled')
+        self.spin_speed_scale.configure(
+            state='normal' if (ready or spin) and not pending else 'disabled')
+        for button in self.spin_speed_preset_buttons:
+            button.configure(
+                state='normal' if (ready or spin) and not pending else 'disabled')
         self.spin_scale.configure(
             state='normal' if (ready or spin) and not pending else 'disabled')
         vel_state = ('normal' if (ready or spin) and
@@ -642,6 +720,8 @@ class App:
         self.encoder_text.set('等待有效采样')
         self.turns_text.set('相对累计  +0.000 圈')
         self.canvas.itemconfigure(self.needle, state='hidden')
+        for var in self.current_vars.values():
+            var.set('---')
         for var in self.health_vars.values():
             var.set('--')
         self.fault_text.set('故障原因：等待设备状态')
@@ -653,6 +733,11 @@ class App:
         self.banner.configure(text='未连接',bg='#e8edf4',fg='#28374d')
         for i, button in enumerate(self.phase_buttons):
             button.configure(text=f"{'ABC'[i]} 关闭")
+
+    def _show_currents(self, ia, ib, ic, valid):
+        values = (ia, ib, ic) if valid else (None, None, None)
+        for name, value in zip('ABC', values):
+            self.current_vars[name].set('---' if value is None else f'{value:+d}')
 
     def _update(self, status):
         self.health_box.configure(text='健康状态与采样')
@@ -667,8 +752,9 @@ class App:
         self.angle_text.set(f'{deg:.1f}°' if v['encok'] else '--.-°')
         self.encoder_text.set(f"raw {raw_display} / CRC失败 {v['crc']}" if v['encok'] else f"采样无效 / CRC失败 {v['crc']}")
         self.turns_text.set(f'相对累计  {self.model.turns:+.3f} 圈')
+        self._show_currents(v['ia'], v['ib'], v['ic'], v['adcok'])
         a = math.radians(deg-90)
-        self.canvas.coords(self.needle,120,120,120+82*math.cos(a),120+82*math.sin(a))
+        self.canvas.coords(self.needle,110,110,110+76*math.cos(a),110+76*math.sin(a))
         self.canvas.itemconfigure(self.needle,state='normal' if v['encok'] else 'hidden')
         drv = '配置与状态通过' if v['drvok'] else '不可用 / 供电或 SPI 异常'
         self.health_vars['驱动'].set(f"{drv}   IC_STAT=0x{v['drv']:02X}   BRK={v['brk']}")
@@ -703,6 +789,11 @@ class App:
             self.spin_scale.configure(to=SPIN_OPENLOOP_POWER_MAX if is_open else 80)
             if is_open and self.spin_power.get() > SPIN_OPENLOOP_POWER_MAX:
                 self.spin_power.set(SPIN_OPENLOOP_POWER_MAX)
+            if not is_open and now >= self.command_pending_until:
+                target_rpm_int = int(round(target_rpm))
+                if 3 <= target_rpm_int <= 60:
+                    self.spin_speed_rpm.set(target_rpm_int)
+                    self.spin_speed_text.set(f'{target_rpm_int} rpm')
             if self.spin_stop_at and now - self.spin_stop_at < 2.5:
                 self.spin_status.set(f'减速停止中：{rpm:+.1f} rpm')
             elif not is_open:
@@ -764,6 +855,8 @@ class App:
         self.haptic_history.append((now, telemetry))
         self.haptic_latest = telemetry
         v = telemetry.values
+        if all(key in v for key in ('ia', 'ib', 'ic', 'adcok')):
+            self._show_currents(v['ia'], v['ib'], v['ic'], v['adcok'])
         if 'raw' in v and (self.model.status is None or self.model.status['encok']):
             raw = (v['raw'] if ENCODER_DISPLAY_DIRECTION > 0
                    else (-v['raw']) & 0x3fff)
@@ -771,8 +864,8 @@ class App:
             self.angle_text.set(f'{deg:.1f}°')
             self.encoder_text.set(f'raw {raw} / ISR {v["hz"]} Hz')
             a = math.radians(deg - 90)
-            self.canvas.coords(self.needle, 120, 120,
-                               120 + 82 * math.cos(a), 120 + 82 * math.sin(a))
+            self.canvas.coords(self.needle, 110, 110,
+                               110 + 76 * math.cos(a), 110 + 76 * math.sin(a))
             self.canvas.itemconfigure(self.needle, state='normal')
         self.haptic_live.set(
             f"m{v['hm']} {HAPTIC_MODE_NAMES[v['hm']]} | "
